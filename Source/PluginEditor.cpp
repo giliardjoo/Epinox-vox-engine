@@ -71,7 +71,8 @@ public:
 
         generateButton.setComponentID ("generate");
         generateButton.setButtonText ("GENERATE");
-        generateButton.onClick = [this] { onGenerate(); };
+        generateButton.onClick = [this] { pendingGenerate = false; onGenerate(); };
+        phrase.onReturnKey = [this] { pendingGenerate = false; onGenerate(); };   // Enter in the phrase field also generates
 
         prevButton.setButtonText ("<");
         nextButton.setButtonText (">");
@@ -227,6 +228,12 @@ private:
 
         generateButton.setEnabled (! proc.isGenerating());
 
+        if (pendingGenerate && ! proc.isGenerating())
+        {
+            pendingGenerate = false;
+            onGenerate();
+        }
+
         // Show the generator's messages (finished, restored with the project, failed).
         if (proc.getGenerationStatusVersion() != lastStatusVersion)
         {
@@ -286,8 +293,11 @@ private:
         presetLabel.setText (proc.presets.getCurrentName(), juce::dontSendNotification);
         setStatus ({}, false);
 
-        // A factory preset sounds right away: it generates its vocal.
-        if (proc.presets.isFactoryCurrent() && ! proc.isGenerating())
+        // Every preset sounds right away: loading it generates its vocal. While one is still being made
+        // (quick stepping through presets), the newest preset waits and is generated as soon as the worker is free.
+        if (proc.isGenerating())
+            pendingGenerate = true;
+        else
             onGenerate();
     }
 
@@ -385,6 +395,7 @@ private:
 
     juce::Image logo;
 
+    bool pendingGenerate = false;
     GenreList genreList;
     juce::TextEditor phrase;
     juce::TextButton generateButton, prevButton, nextButton, saveButton, openButton;

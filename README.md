@@ -98,7 +98,7 @@ Details worth knowing:
 ## Factory presets (Phase 5)
 
 85 presets are built in, grouped by genre in the picker (`Source/FactoryPresets.h`). Click the preset name in the header to pick one from the genre menus, or use the
-arrows (factory presets first, then your own saved ones). A factory preset resets every control to its default, applies its
+arrows (factory presets first, then your own saved ones). Loading any preset (factory or file) generates its vocal automatically; Enter in the phrase field also generates. A factory preset resets every control to its default, applies its
 settings and generates its vocal straight away. Power is never changed by a preset.
 
 ## Tests
