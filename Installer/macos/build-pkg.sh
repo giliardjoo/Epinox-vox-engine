@@ -16,14 +16,27 @@ cp -R "$ART/VST3/$NAME.vst3" "$WORK/vst3/"
 cp -R "$ART/AU/$NAME.component" "$WORK/au/"
 cp -R "$ART/Standalone/$NAME.app" "$WORK/app/"
 
-# One component package per destination. Bundles are set to non relocatable so they always land in the
-# folder below, even if a copy of the app exists somewhere else on the disk.
+# One component package per destination. When pkgbuild lists the bundle as relocatable (it does for apps),
+# it is set to non relocatable so the bundle always lands in the folder below, even if another copy exists.
 make_pkg () {
     local dir="$1" id="$2" location="$3" out="$4"
-    pkgbuild --analyze --root "$dir" "$WORK/$id.plist" > /dev/null
-    /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$WORK/$id.plist"
+    local plist="$WORK/$id.plist"
+    local args=()
+    local i=0
+
+    pkgbuild --analyze --root "$dir" "$plist" > /dev/null
+
+    while /usr/libexec/PlistBuddy -c "Print :$i:BundleIsRelocatable" "$plist" > /dev/null 2>&1; do
+        /usr/libexec/PlistBuddy -c "Set :$i:BundleIsRelocatable false" "$plist"
+        i=$((i + 1))
+    done
+
+    if [ "$i" -gt 0 ]; then
+        args=(--component-plist "$plist")
+    fi
+
     pkgbuild --root "$dir" \
-             --component-plist "$WORK/$id.plist" \
+             ${args[@]+"${args[@]}"} \
              --identifier "$id" \
              --version "$VERSION" \
              --install-location "$location" \
