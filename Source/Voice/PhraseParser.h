@@ -202,7 +202,7 @@ private:
             syl.resize (nuclei.size());
 
             for (size_t k = 0; k < nuclei.size(); ++k)
-                syl[k].vowel = tokens[nuclei[k]].code[0];
+                syl[k].vowel = static_cast<char> (tokens[nuclei[k]].code[0]);
 
             for (size_t i = 0; i < nuclei.front(); ++i)
                 syl.front().onset.push_back (tokens[i].code);
