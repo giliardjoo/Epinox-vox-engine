@@ -199,4 +199,23 @@ inline GenreProfile genreProfile (int index)
         default: return { { 0, 2, 4, 6, 7, 9, 11 }, 0.0f };      // Ambient: lydian
     }
 }
+
+// Forced scales, in the same order as scaleNames() (index 0 means "follow the genre" and is not listed here).
+inline std::vector<int> scaleIntervals (int index)
+{
+    switch (index)
+    {
+        case 1:  return { 0, 2, 3, 5, 7, 8, 10 };   // natural minor
+        case 2:  return { 0, 2, 4, 5, 7, 9, 11 };   // major
+        case 3:  return { 0, 2, 3, 5, 7, 9, 10 };   // dorian
+        case 4:  return { 0, 1, 3, 5, 7, 8, 10 };   // phrygian
+        case 5:  return { 0, 2, 4, 5, 7, 9, 10 };   // mixolydian
+        case 6:  return { 0, 2, 4, 6, 7, 9, 11 };   // lydian
+        case 7:  return { 0, 2, 3, 5, 7, 8, 11 };   // harmonic minor
+        case 8:  return { 0, 3, 5, 7, 10 };         // minor pentatonic
+        case 9:  return { 0, 2, 4, 7, 9 };          // major pentatonic
+        case 10: return { 0, 3, 5, 6, 7, 10 };      // blues
+        default: return {};
+    }
+}
 } // namespace epinox::voice

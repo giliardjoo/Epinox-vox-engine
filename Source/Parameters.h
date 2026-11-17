@@ -17,6 +17,8 @@ namespace pid
     inline constexpr const char* pitch     = "pitch";
     inline constexpr const char* formant   = "formant";
     inline constexpr const char* bpm       = "bpm";
+    inline constexpr const char* key       = "key";
+    inline constexpr const char* scale     = "scale";
 
     // Vocal Chop Engine
     inline constexpr const char* chopOn     = "chopOn";
@@ -51,6 +53,18 @@ inline juce::StringArray genreNames()
 {
     return { "Melodic Techno", "Progressive House", "Afro House", "Peak Time Techno", "Hard Techno",
              "Hypnotic Techno", "Trance", "Deep House", "Tech House", "Ambient" };
+}
+
+inline juce::StringArray keyNames()
+{
+    return { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+}
+
+// Index 0 follows the genre; the others force a scale whatever the genre is.
+inline juce::StringArray scaleNames()
+{
+    return { "Genre", "Natural Minor", "Major", "Dorian", "Phrygian", "Mixolydian", "Lydian",
+             "Harmonic Minor", "Minor Pentatonic", "Major Pentatonic", "Blues" };
 }
 
 inline juce::StringArray voiceTypeNames()
@@ -102,6 +116,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     addPct    (pid::mix, "Mix", 70.0f);
 
     layout.add (std::make_unique<APC> (id (pid::genre),     "Genre",      genreNames(),     0));
+    layout.add (std::make_unique<APC> (id (pid::key),       "Key",        keyNames(),       9));
+    layout.add (std::make_unique<APC> (id (pid::scale),     "Scale",      scaleNames(),     0));
     layout.add (std::make_unique<APC> (id (pid::voiceType), "Voice Type", voiceTypeNames(), 0));
     layout.add (std::make_unique<APC> (id (pid::emotion),   "Emotion",    emotionNames(),   0));
     layout.add (std::make_unique<APC> (id (pid::style),     "Style",      styleNames(),     0));

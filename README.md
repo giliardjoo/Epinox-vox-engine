@@ -40,7 +40,8 @@ automatically. Without it the header shows a plain text wordmark.
 | 1 | Foundation: project, build, parameters, presets, interface | done (this commit) |
 | 2 | Audio engine: Vocal Chop, Transform, Effects, Spatial, Mix | done, validated by numerical tests |
 | 3 | Vocal generation (GENERATE), offline synthesis | done, validated by numerical tests |
-| 4 to 6 | Musical intelligence, advanced features, installers and licensing | not started |
+| 4 | Musical intelligence: Key and Scale, chord-tone melodies, tonic resolution | done, validated by numerical tests |
+| 5 to 6 | Advanced features, factory presets, licensing | not started |
 
 What is real today:
 
@@ -72,6 +73,11 @@ GENERATE turns the phrase into a sung vocal loop, fully offline (no internet, no
 4. **Playback**: the loop (1 to 8 bars) is generated on a worker thread, never on the audio thread, then played in time with
    the host transport (free running in standalone). It enters the chain before Vocal Chop, so every module processes it,
    and it follows the Mix knob like the rest of the processed signal. It is silent while the host transport is stopped.
+
+Musical intelligence (Phase 4): the **Key** (C to B) and **Scale** (Genre, Natural Minor, Major, Dorian, Phrygian, Mixolydian,
+Lydian, Harmonic Minor, Minor/Major Pentatonic, Blues) selectors set the notes of the melody. Scale "Genre" follows the genre's own
+scale. Melodies put chord tones (1st, 3rd, 5th) on the strong beats most of the time and the leaping style resolves on the tonic.
+Match the key to your track to make the vocal fit what you already have in Live.
 
 Details worth knowing:
 

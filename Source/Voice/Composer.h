@@ -30,7 +30,7 @@ public:
     static constexpr double maxLoopBeats = 32.0;
 
     static Composition compose (std::vector<Syllable> syllables, int genre, int style, int emotion, int voiceType,
-                                juce::int64 seed)
+                                juce::int64 seed, int key = 9, int scaleChoice = 0)
     {
         juce::Random rng (seed);
         const auto G = genreProfile (genre);
@@ -42,20 +42,23 @@ public:
         c.syllables = std::move (syllables);
 
         const int count = static_cast<int> (c.syllables.size());
-        const int len = static_cast<int> (G.scale.size());
+        const auto forced = scaleIntervals (scaleChoice);
+        const std::vector<int>& scaleNotes = forced.empty() ? G.scale : forced;
+        const int len = static_cast<int> (scaleNotes.size());
 
-        // Scale root: the A closest to six semitones below the voice centre, so the melody sits around the centre.
-        const int base = 9 + 12 * static_cast<int> (std::lround ((V.centreMidi - 6.0f - 9.0f) / 12.0f));
+        // Scale root: the chosen key closest to six semitones below the voice centre, so the melody sits around the centre.
+        const int keyPc = juce::jlimit (0, 11, key);
+        const int base = keyPc + 12 * static_cast<int> (std::lround ((V.centreMidi - 6.0f - static_cast<float> (keyPc)) / 12.0f));
 
         auto degreeToMidi = [&] (int idx)
         {
             const int oct = static_cast<int> (std::floor (static_cast<double> (idx) / len));
-            const int pc = G.scale[static_cast<size_t> (idx - oct * len)];
+            const int pc = scaleNotes[static_cast<size_t> (idx - oct * len)];
             return static_cast<float> (base + 12 * oct + pc);
         };
 
         // Rhythm of one pass through the phrase.
-        struct Slot { double rest, beats; };
+        struct Slot { double rest, beats, start; };
         std::vector<Slot> slots;
         double passBeats = 0.0;
 
@@ -67,7 +70,7 @@ public:
             if (i > 0 && rng.nextFloat() < S.restChance)
                 rest = d;
 
-            slots.push_back ({ rest, d });
+            slots.push_back ({ rest, d, passBeats + rest });
             passBeats += rest + d;
         }
 
@@ -85,6 +88,30 @@ public:
 
         const int motifLength = 2 + rng.nextInt (2);
 
+        // Chord tones (1st, 3rd, 5th of the scale) carry the strong beats; passing notes fill the rest.
+        auto snapToChord = [&] (int degree)
+        {
+            int best = degree, bestDist = 1000;
+
+            for (int oct = -1; oct <= 1; ++oct)
+                for (int cd : { 0, 2, 4 })
+                {
+                    if (cd >= len)
+                        continue;
+
+                    const int cand = cd + oct * len + (degree >= 0 ? (degree / len) * len : -((-degree + len - 1) / len) * len);
+                    const int dist = std::abs (cand - degree);
+
+                    if (dist < bestDist)
+                    {
+                        bestDist = dist;
+                        best = cand;
+                    }
+                }
+
+            return best;
+        };
+
         for (int i = 0; i < count; ++i)
         {
             float m = 0.0f;
@@ -101,6 +128,14 @@ public:
                         step = -std::abs (step == 0 ? 1 : step);
 
                     idx = juce::jlimit (-2, len + 1, idx + step);
+
+                    // Strong beats land on chord tones most of the time.
+                    const double startBeat = slots[static_cast<size_t> (i)].start;
+                    const bool strong = std::abs (std::fmod (startBeat, 2.0)) < 1.0e-6;
+
+                    if (strong && rng.nextFloat() < 0.7f)
+                        idx = juce::jlimit (-2, len + 1, snapToChord (idx));
+
                     m = degreeToMidi (i == count - 1 ? (idx > len / 2 ? len : 0) : idx);
                     break;
                 }
@@ -115,7 +150,14 @@ public:
                         + 0.9f * std::sin (static_cast<float> (i) * 0.9f) + (rng.nextFloat() - 0.5f) * 0.8f;
                     break;
                 case StyleProfile::Mode::leaps:
-                    m = degreeToMidi (rng.nextInt (len * 2) - 1);
+                {
+                    int d = rng.nextInt (len * 2) - 1;
+
+                    if (slots[static_cast<size_t> (i)].start - std::floor (slots[static_cast<size_t> (i)].start / 2.0) * 2.0 < 1.0e-6)
+                        d = snapToChord (d);
+
+                    m = degreeToMidi (i == count - 1 ? 0 : d);   // the phrase resolves on the tonic
+                }
                     break;
             }
 

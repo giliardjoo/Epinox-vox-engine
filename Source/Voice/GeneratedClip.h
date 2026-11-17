@@ -10,6 +10,8 @@ struct GenerationRequest
 {
     juce::String phrase;
     int genre = 0, voiceType = 0, emotion = 0, style = 0;
+    int key = 9;                     // 0 = C ... 11 = B (default A)
+    int scale = 0;                   // 0 = follow the genre, 1.. = forced scale (see scaleNames)
     double bpm = 128.0;
     juce::uint32 variation = 0;      // changes on every GENERATE press: "infinite possibilities"
     double sampleRate = 44100.0;

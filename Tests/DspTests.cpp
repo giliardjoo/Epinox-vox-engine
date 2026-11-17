@@ -623,6 +623,45 @@ void testVoiceGenerator()
     }
 
     {
+        // Key and scale: every composed note belongs to the chosen scale, in every key, and the melody ends on the tonic.
+        using namespace epinox::voice;
+        bool allIn = true, endsOnTonic = true;
+        int tested = 0;
+
+        for (int scaleChoice = 1; scaleChoice <= 10; ++scaleChoice)
+            for (int key = 0; key < 12; key += 3)
+                for (int style : { 2, 5, 9 })
+                {
+                    auto comp = Composer::compose (PhraseParser::parse ("lets get lost together tonight"), 0, style, 0, 0,
+                                                   12345, key, scaleChoice);
+                    const auto notes = scaleIntervals (scaleChoice);
+                    ++tested;
+
+                    for (auto& n : comp.notes)
+                    {
+                        const int pc = ((static_cast<int> (std::lround (n.midi)) - key) % 12 + 12) % 12;
+                        allIn = allIn && std::find (notes.begin(), notes.end(), pc) != notes.end();
+                    }
+
+                    if (style == 9 && ! comp.notes.empty() && comp.truncated == 0)
+                        endsOnTonic = endsOnTonic && (((static_cast<int> (std::lround (comp.notes.back().midi)) - key) % 12 + 12) % 12) == 0;
+                }
+
+        check (allIn, fmt ("all notes of %.0f melodies stay in the chosen key and scale", static_cast<double> (tested)));
+        check (endsOnTonic, "an experimental (leaping) melody resolves on the tonic");
+
+        epinox::GenerationRequest k;
+        k.phrase = "hold me";
+        k.sampleRate = sr;
+        k.key = 0;
+        k.scale = 2;
+        const auto inC = renderPhrase (k);
+        k.key = 6;
+        const auto inFs = renderPhrase (k);
+        check (inC != nullptr && inFs != nullptr && inC->left != inFs->left, "changing the key changes the rendered vocal");
+    }
+
+    {
         epinox::GenerationRequest r;
         r.phrase = "Take me higher";
         r.sampleRate = sr;

@@ -21,6 +21,8 @@ public:
           voiceCombo   (p.apvts, pid::voiceType, "VOICE TYPE"),
           emotionCombo (p.apvts, pid::emotion,   "EMOTION"),
           styleCombo   (p.apvts, pid::style,     "STYLE"),
+          keyCombo     (p.apvts, pid::key,       "KEY"),
+          scaleCombo   (p.apvts, pid::scale,     "SCALE"),
           pitchKnob    (p.apvts, pid::pitch,   "PITCH",   " st", 1),
           formantKnob  (p.apvts, pid::formant, "FORMANT", " st", 1),
           bpmKnob      (p.apvts, pid::bpm,     "BPM",     "",    1),
@@ -93,7 +95,7 @@ public:
 
         for (auto* c : std::initializer_list<juce::Component*> {
                  &genreList, &phrase, &generateButton,
-                 &voiceCombo, &emotionCombo, &styleCombo, &pitchKnob, &formantKnob, &bpmKnob,
+                 &voiceCombo, &emotionCombo, &styleCombo, &keyCombo, &scaleCombo, &pitchKnob, &formantKnob, &bpmKnob,
                  &mixKnob, &outKnob, &waveform, &meterIn, &meterOut,
                  &chopPanel, &transformPanel, &effectsPanel, &spatialPanel,
                  &prevButton, &nextButton, &saveButton, &openButton, &powerButton,
@@ -188,7 +190,10 @@ public:
         formantKnob.setBounds (444, 200, 196, 128);
         bpmKnob.setBounds     (652, 200, 196, 128);
 
-        waveform.setBounds (236, 336, 612, 136);
+        keyCombo.setBounds   (236, 332, 196, 46);
+        scaleCombo.setBounds (444, 332, 404, 46);
+
+        waveform.setBounds (236, 386, 612, 86);
 
         mixKnob.setBounds (864, 80, 220, 250);
         meterIn.setBounds  (878, 342, 50, 130);
@@ -257,6 +262,8 @@ private:
         request.voiceType = static_cast<int> (get (pid::voiceType));
         request.emotion   = static_cast<int> (get (pid::emotion));
         request.style     = static_cast<int> (get (pid::style));
+        request.key       = static_cast<int> (get (pid::key));
+        request.scale     = static_cast<int> (get (pid::scale));
         request.bpm       = get (pid::bpm);
 
         // When the host reports a tempo, the vocal is generated at that tempo and the BPM knob follows it.
@@ -339,7 +346,7 @@ private:
     juce::ToggleButton powerButton;
     juce::Label presetLabel, statusLabel;
 
-    NeonCombo voiceCombo, emotionCombo, styleCombo;
+    NeonCombo voiceCombo, emotionCombo, styleCombo, keyCombo, scaleCombo;
     NeonKnob pitchKnob, formantKnob, bpmKnob, mixKnob, outKnob;
     WaveformView waveform;
     MeterBar meterIn, meterOut;
