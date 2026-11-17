@@ -41,7 +41,7 @@ automatically. Without it the header shows a plain text wordmark.
 | 2 | Audio engine: Vocal Chop, Transform, Effects, Spatial, Mix | done, validated by numerical tests |
 | 3 | Vocal generation (GENERATE), offline synthesis | done, validated by numerical tests |
 | 4 | Musical intelligence: Key and Scale, chord-tone melodies, tonic resolution | done, validated by numerical tests |
-| 5 | 70 factory presets that generate their own vocal | done |
+| 5 | 85 factory presets that generate their own vocal | done |
 | 6 | Commercial parameter document, licensing | not started |
 
 What is real today:
@@ -97,7 +97,7 @@ Details worth knowing:
 
 ## Factory presets (Phase 5)
 
-70 presets are built in, grouped by genre in the picker (`Source/FactoryPresets.h`). Click the preset name in the header to pick one from the genre menus, or use the
+85 presets are built in, grouped by genre in the picker (`Source/FactoryPresets.h`). Click the preset name in the header to pick one from the genre menus, or use the
 arrows (factory presets first, then your own saved ones). A factory preset resets every control to its default, applies its
 settings and generates its vocal straight away. Power is never changed by a preset.
 
