@@ -1,5 +1,6 @@
 #include "PresetManager.h"
 #include "Parameters.h"
+#include "FactoryPresets.h"
 
 namespace epinox
 {
@@ -71,26 +72,58 @@ bool PresetManager::loadPreset (const juce::File& file)
     apvts.state.setProperty ("phrase", root->getProperty ("phrase").toString(), nullptr);
 
     currentFile = file;
+    currentFactory = -1;
     currentName = file.getFileNameWithoutExtension();
+    return true;
+}
+
+bool PresetManager::loadFactory (int index)
+{
+    const auto& list = factoryPresets();
+
+    if (index < 0 || index >= static_cast<int> (list.size()))
+        return false;
+
+    const auto& preset = list[static_cast<size_t> (index)];
+
+    // Start from the defaults (except Power), then apply what the preset sets.
+    for (auto* p : apvts.processor.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
+            if (ranged->paramID != juce::String (pid::power))
+                ranged->setValueNotifyingHost (ranged->getDefaultValue());
+
+    for (const auto& kv : preset.values)
+        if (auto* p = apvts.getParameter (kv.first))
+            p->setValueNotifyingHost (p->convertTo0to1 (kv.second));
+
+    apvts.state.setProperty ("phrase", preset.phrase, nullptr);
+
+    currentFile = juce::File();
+    currentFactory = index;
+    currentName = preset.name;
     return true;
 }
 
 bool PresetManager::loadRelative (int delta)
 {
-    auto files = listPresets();
-    const int n = files.size();
+    const auto files = listPresets();
+    const int nf = static_cast<int> (factoryPresets().size());
+    const int total = nf + files.size();
 
-    if (n == 0)
-        return false;
+    int current = -1;
 
-    const int idx = files.indexOf (currentFile);
+    if (currentFactory >= 0)
+        current = currentFactory;
+    else if (currentFile != juce::File() && files.indexOf (currentFile) >= 0)
+        current = nf + files.indexOf (currentFile);
+
     int next = 0;
 
-    if (idx < 0)
-        next = delta > 0 ? 0 : n - 1;
+    if (current < 0)
+        next = delta > 0 ? 0 : total - 1;
     else
-        next = (idx + delta % n + n) % n;
+        next = (current + delta % total + total) % total;
 
-    return loadPreset (files.getReference (next));
+    return next < nf ? loadFactory (next) : loadPreset (files.getReference (next - nf));
 }
 } // namespace epinox

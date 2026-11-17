@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "FactoryPresets.h"
 #include "UI/Widgets.h"
 
 #if EPINOX_HAS_LOGO
@@ -78,6 +79,7 @@ public:
         openButton.setButtonText ("OPEN");
         prevButton.onClick = [this] { if (proc.presets.loadRelative (-1)) afterPresetLoad(); };
         nextButton.onClick = [this] { if (proc.presets.loadRelative (+1)) afterPresetLoad(); };
+        presetLabel.addMouseListener (this, false);
         saveButton.onClick = [this] { onSave(); };
         openButton.onClick = [this] { onOpen(); };
 
@@ -239,11 +241,35 @@ private:
         statusLabel.setText (message, juce::dontSendNotification);
     }
 
+    // Click the preset name to pick a factory preset from a list.
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.eventComponent != &presetLabel)
+            return;
+
+        juce::PopupMenu menu;
+        const auto& list = factoryPresets();
+
+        for (size_t i = 0; i < list.size(); ++i)
+            menu.addItem (static_cast<int> (i) + 1, list[i].name);
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&presetLabel),
+                            [this] (int result)
+                            {
+                                if (result > 0 && proc.presets.loadFactory (result - 1))
+                                    afterPresetLoad();
+                            });
+    }
+
     void afterPresetLoad()
     {
         phrase.setText (apvts.state.getProperty ("phrase").toString(), false);
         presetLabel.setText (proc.presets.getCurrentName(), juce::dontSendNotification);
         setStatus ({}, false);
+
+        // A factory preset sounds right away: it generates its vocal.
+        if (proc.presets.isFactoryCurrent() && ! proc.isGenerating())
+            onGenerate();
     }
 
     void onGenerate()

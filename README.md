@@ -41,7 +41,8 @@ automatically. Without it the header shows a plain text wordmark.
 | 2 | Audio engine: Vocal Chop, Transform, Effects, Spatial, Mix | done, validated by numerical tests |
 | 3 | Vocal generation (GENERATE), offline synthesis | done, validated by numerical tests |
 | 4 | Musical intelligence: Key and Scale, chord-tone melodies, tonic resolution | done, validated by numerical tests |
-| 5 to 6 | Advanced features, factory presets, licensing | not started |
+| 5 | 20 factory presets that generate their own vocal | done |
+| 6 | Commercial parameter document, licensing | not started |
 
 What is real today:
 
@@ -87,6 +88,12 @@ Details worth knowing:
   rebuilt from them, identically.
 - The global Pitch and Formant knobs and the Transform module act on the generated vocal in real time, so they do not need a new GENERATE.
 - A cloud or model backend can later replace `renderPhrase` inside `GenerationService` without touching the rest of the plugin.
+
+## Factory presets (Phase 5)
+
+20 presets are built in (`Source/FactoryPresets.h`). Click the preset name in the header to pick one from a list, or use the
+arrows (factory presets first, then your own saved ones). A factory preset resets every control to its default, applies its
+settings and generates its vocal straight away. Power is never changed by a preset.
 
 ## Tests
 

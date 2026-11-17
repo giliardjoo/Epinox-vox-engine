@@ -17,11 +17,16 @@ public:
     bool loadPreset (const juce::File& file);
     bool loadRelative (int delta);
 
+    // Factory presets come first in the previous / next order, then the user's own files.
+    bool loadFactory (int index);
+    bool isFactoryCurrent() const { return currentFactory >= 0; }
+
     juce::String getCurrentName() const { return currentName; }
 
 private:
     juce::AudioProcessorValueTreeState& apvts;
     juce::File currentFile;
+    int currentFactory = -1;
     juce::String currentName { "Init" };
 };
 } // namespace epinox
