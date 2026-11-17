@@ -250,8 +250,27 @@ private:
         juce::PopupMenu menu;
         const auto& list = factoryPresets();
 
-        for (size_t i = 0; i < list.size(); ++i)
-            menu.addItem (static_cast<int> (i) + 1, list[i].name);
+        // One submenu per genre.
+        const auto genres = genreNames();
+
+        for (int g = 0; g < genres.size(); ++g)
+        {
+            juce::PopupMenu sub;
+
+            for (size_t i = 0; i < list.size(); ++i)
+            {
+                int presetGenre = 0;
+
+                for (const auto& kv : list[i].values)
+                    if (juce::String (kv.first) == pid::genre)
+                        presetGenre = static_cast<int> (kv.second);
+
+                if (presetGenre == g)
+                    sub.addItem (static_cast<int> (i) + 1, list[i].name);
+            }
+
+            menu.addSubMenu (genres[g], sub);
+        }
 
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&presetLabel),
                             [this] (int result)
