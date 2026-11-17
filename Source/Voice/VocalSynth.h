@@ -288,9 +288,10 @@ private:
         //----------------------------------------------------------------------
         // Amplitude of harmonics 1..maxHarm for a given f0 and formant set, normalised to an RMS of `rms`.
         int computeAmps (float f0, float f1, float f2, float f3, float rms, float bright, float singer,
-                     std::array<float, maxHarm + 1>& out) const
+                     std::array<float, maxHarm + 1>& out, std::array<float, maxHarm + 1>& phaseOut) const
         {
             out.fill (0.0f);
+            phaseOut.fill (0.0f);
 
             if (rms <= 1.0e-6f)
                 return 0;
@@ -305,14 +306,18 @@ private:
             for (int k = 1; k <= h; ++k)
             {
                 const float f = f0 * static_cast<float> (k);
-                float g = 1.0f;
+                float g = 1.0f, ph = 0.0f;
 
                 for (int i = 0; i < 5; ++i)
                 {
                     const float a = fc[i] * fc[i] - f * f;
                     const float b = f * bw[i];
                     g *= (fc[i] * fc[i]) / std::sqrt (a * a + b * b);
+                    ph -= std::atan2 (b, a);      // phase of the resonator: the vocal tract rounds the glottal pulse
                 }
+
+                // Robotic voices keep the sharp zero-phase buzz on purpose.
+                phaseOut[static_cast<size_t> (k)] = V.robotic ? 0.0f : ph;
 
                 if (V.robotic)
                     g = std::pow (g, 0.5f);
@@ -353,11 +358,12 @@ private:
                 double phase = 0.0;
                 float f0 = 200.0f;
                 int h = 1;
-                std::array<float, maxHarm + 1> amp {}, next {}, step {};
+                std::array<float, maxHarm + 1> amp {}, next {}, step {}, ampI {}, nextI {}, stepI {};
             };
 
             std::array<VoiceState, 3> vs;
             Biquad fric, br1, br2, br3;
+            std::array<float, maxHarm + 1> phaseTmp {};
 
             Formants fCur = scaled (vowelFormants ('a'));
             float voiceA = 0.0f, noiseA = 0.0f, breathA = 0.0f, noiseHz = 4000.0f, noiseBw = 2000.0f;
@@ -484,13 +490,30 @@ private:
                     const float bright = brightness * (0.8f + 0.2f * level);
 
                     st.h = computeAmps (f0, f1Eff, fCur.f2, fCur.f3, targetRms * voiceA * (1.0f + 0.04f * shimmer * human),
-                                        bright, singer, st.next);
+                                        bright, singer, st.next, phaseTmp);
+
+                    // Complex coefficient per harmonic (real part on sin, imaginary part on cos), so ramps stay smooth.
+                    for (int k = 1; k <= st.h; ++k)
+                    {
+                        const float a = st.next[static_cast<size_t> (k)], ph = phaseTmp[static_cast<size_t> (k)];
+                        st.next[static_cast<size_t> (k)] = a * std::cos (ph);
+                        st.nextI[static_cast<size_t> (k)] = a * std::sin (ph);
+                    }
+
+                    for (int k = st.h + 1; k <= maxHarm; ++k)
+                        st.nextI[static_cast<size_t> (k)] = 0.0f;
 
                     if (firstFrame)
+                    {
                         st.amp = st.next;
+                        st.ampI = st.nextI;
+                    }
 
                     for (int k = 1; k <= maxHarm; ++k)
+                    {
                         st.step[static_cast<size_t> (k)] = (st.next[static_cast<size_t> (k)] - st.amp[static_cast<size_t> (k)]) / hop;
+                        st.stepI[static_cast<size_t> (k)] = (st.nextI[static_cast<size_t> (k)] - st.ampI[static_cast<size_t> (k)]) / hop;
+                    }
 
                     const float f0Start = firstFrame ? f0 : st.f0;
                     st.f0 = f0;
@@ -523,21 +546,23 @@ private:
                         if (st.phase > twoPi)
                             st.phase -= twoPi;
 
-                        const double c2 = 2.0 * std::cos (st.phase);
-                        double sPrev = 0.0, sCur = std::sin (st.phase);
+                        const double cs = std::cos (st.phase), sn = std::sin (st.phase);
+                        double sk = sn, ck = cs;       // sin and cos of k * phase, advanced by rotation
                         double sum = 0.0;
 
                         for (int k = 1; k <= maxHarm; ++k)
                         {
                             auto& a = st.amp[static_cast<size_t> (k)];
+                            auto& b = st.ampI[static_cast<size_t> (k)];
                             a += st.step[static_cast<size_t> (k)];
+                            b += st.stepI[static_cast<size_t> (k)];
 
                             if (k <= st.h)
                             {
-                                sum += static_cast<double> (a) * sCur;
-                                const double sNext = c2 * sCur - sPrev;
-                                sPrev = sCur;
-                                sCur = sNext;
+                                sum += static_cast<double> (a) * sk + static_cast<double> (b) * ck;
+                                const double sNext = sk * cs + ck * sn;
+                                ck = ck * cs - sk * sn;
+                                sk = sNext;
                             }
                         }
 
@@ -552,7 +577,10 @@ private:
                 }
 
                 for (int v = 0; v < voices; ++v)
-                    vs[static_cast<size_t> (v)].amp = vs[static_cast<size_t> (v)].next;
+                    {
+                        vs[static_cast<size_t> (v)].amp = vs[static_cast<size_t> (v)].next;
+                        vs[static_cast<size_t> (v)].ampI = vs[static_cast<size_t> (v)].nextI;
+                    }
             }
 
             return true;
