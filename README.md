@@ -80,6 +80,11 @@ Lydian, Harmonic Minor, Minor/Major Pentatonic, Blues) selectors set the notes o
 scale. Melodies put chord tones (1st, 3rd, 5th) on the strong beats most of the time and the leaping style resolves on the tonic.
 Match the key to your track to make the vocal fit what you already have in Live.
 
+Voice realism (v0.6): the synthesiser adds the small imperfections of a real singer: slow intonation drift, cycle-to-cycle
+jitter, level shimmer, an irregular vibrato rate and depth, a slightly different tuning and vowel colour on every note, pulsed
+breath noise, brighter tone when singing louder, a singer's formant around 3 kHz, and first-formant tuning on high notes.
+Robotic voices and the Robotic emotion stay perfectly regular on purpose.
+
 Details worth knowing:
 
 - Pressing GENERATE again gives a new variation of the same phrase. The same phrase and settings always give the same audio.

@@ -601,7 +601,7 @@ void testVoiceGenerator()
         const auto i = renderVowel ('i', 45.0f, 1);
         const double f1a = peakFrequency (a->left, 150.0, 1500.0);
         const double f1i = peakFrequency (i->left, 150.0, 1500.0);
-        const double f2i = peakFrequency (i->left, 1500.0, 3500.0);
+        const double f2i = peakFrequency (i->left, 1500.0, 2700.0);   // F2 band; F3 of /i/ (about 3000 Hz) lies above it
         check (f1a > 580.0 && f1a < 880.0, fmt ("vowel 'a' has its first formant near %.0f Hz (expected 730)", f1a));
         check (f1i > 120.0 && f1i < 420.0, fmt ("vowel 'i' has its first formant near %.0f Hz (expected 270)", f1i));
         check (f2i > 2000.0 && f2i < 2600.0, fmt ("vowel 'i' has its second formant near %.0f Hz (expected 2290)", f2i));
