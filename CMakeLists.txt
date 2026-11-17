@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(EPINOX_VOX_ENGINE VERSION 0.1.0 LANGUAGES C CXX)
+# Link the Microsoft runtime statically so the plugin loads on any Windows PC, without the VC++ redistributable.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+project(EPINOX_VOX_ENGINE VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -67,3 +70,23 @@ target_link_libraries(EpinoxVoxEngine
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+# Numerical tests of the audio engines:  cmake -B build -DEPINOX_BUILD_TESTS=ON && ctest --test-dir build -C Release
+option(EPINOX_BUILD_TESTS "Build the DSP test executable" OFF)
+
+if(EPINOX_BUILD_TESTS)
+    enable_testing()
+    juce_add_console_app(EpinoxDspTests PRODUCT_NAME "EpinoxDspTests")
+    target_sources(EpinoxDspTests PRIVATE Tests/DspTests.cpp)
+    target_include_directories(EpinoxDspTests PRIVATE Source)
+    target_compile_definitions(EpinoxDspTests PRIVATE JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0)
+    target_link_libraries(EpinoxDspTests PRIVATE juce::juce_dsp juce::juce_recommended_config_flags)
+    add_test(NAME dsp COMMAND EpinoxDspTests)
+
+    juce_add_console_app(EpinoxServiceTest PRODUCT_NAME "EpinoxServiceTest")
+    target_sources(EpinoxServiceTest PRIVATE Tests/GenerationServiceTest.cpp Source/GenerationService.cpp)
+    target_include_directories(EpinoxServiceTest PRIVATE Source)
+    target_compile_definitions(EpinoxServiceTest PRIVATE JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0 JUCE_MODAL_LOOPS_PERMITTED=1)
+    target_link_libraries(EpinoxServiceTest PRIVATE juce::juce_events juce::juce_recommended_config_flags)
+    add_test(NAME generation_service COMMAND EpinoxServiceTest)
+endif()

@@ -88,6 +88,8 @@ public:
         statusLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
         statusLabel.setColour (juce::Label::textColourId, textDim);
         statusLabel.setJustificationType (juce::Justification::centredLeft);
+        statusLabel.setText (proc.getGenerationStatus(), juce::dontSendNotification);
+        lastStatusVersion = proc.getGenerationStatusVersion();
 
         for (auto* c : std::initializer_list<juce::Component*> {
                  &genreList, &phrase, &generateButton,
@@ -215,6 +217,15 @@ private:
         transformPanel.refresh();
         effectsPanel.refresh();
         spatialPanel.refresh();
+
+        generateButton.setEnabled (! proc.isGenerating());
+
+        // Show the generator's messages (finished, restored with the project, failed).
+        if (proc.getGenerationStatusVersion() != lastStatusVersion)
+        {
+            lastStatusVersion = proc.getGenerationStatusVersion();
+            setStatus (proc.getGenerationStatus(), proc.generationStatusIsWarning());
+        }
     }
 
     void setStatus (const juce::String& message, bool warning)
@@ -234,6 +245,12 @@ private:
     {
         const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id)->load(); };
 
+        if (phrase.getText().trim().isEmpty())
+        {
+            setStatus ("Type a phrase first.", true);
+            return;
+        }
+
         GenerationRequest request;
         request.phrase    = phrase.getText();
         request.genre     = static_cast<int> (get (pid::genre));
@@ -241,11 +258,29 @@ private:
         request.emotion   = static_cast<int> (get (pid::emotion));
         request.style     = static_cast<int> (get (pid::style));
         request.bpm       = get (pid::bpm);
-        request.pitch     = get (pid::pitch);
-        request.formant   = get (pid::formant);
 
-        const auto result = proc.generation.generate (request);
-        setStatus (result.message, ! result.ok);
+        // When the host reports a tempo, the vocal is generated at that tempo and the BPM knob follows it.
+        const double hostBpm = proc.getHostBpm();
+
+        if (hostBpm >= 40.0 && hostBpm <= 220.0)
+        {
+            request.bpm = hostBpm;
+
+            if (auto* bpmParam = apvts.getParameter (pid::bpm))
+                bpmParam->setValueNotifyingHost (bpmParam->convertTo0to1 (static_cast<float> (hostBpm)));
+        }
+
+        request.variation = proc.nextVariation();
+
+        if (proc.requestGeneration (request))
+        {
+            lastStatusVersion = proc.getGenerationStatusVersion();
+            setStatus ("Generating vocal...", false);
+        }
+        else
+        {
+            setStatus ("Still generating, one moment.", false);
+        }
     }
 
     void onSave()
@@ -294,6 +329,7 @@ private:
 
     VoxProcessor& proc;
     juce::AudioProcessorValueTreeState& apvts;
+    int lastStatusVersion = 0;
 
     juce::Image logo;
 

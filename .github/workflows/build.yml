@@ -1,0 +1,91 @@
+name: Build and package EPINOX VOX ENGINE
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    name: Windows (VST3 + installer)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        shell: pwsh
+        run: |
+          $m = Select-String -Path CMakeLists.txt -Pattern 'project\(EPINOX_VOX_ENGINE VERSION ([0-9.]+)'
+          "EPINOX_VERSION=$($m.Matches[0].Groups[1].Value)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Configure
+        run: cmake -B build -DEPINOX_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: List build output
+        shell: pwsh
+        run: Get-ChildItem -Recurse build/EpinoxVoxEngine_artefacts/Release | Select-Object -First 40 FullName
+
+      - name: Install Inno Setup if missing
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup was not found after installing it" }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc "/DAppVersion=$env:EPINOX_VERSION" "/DBuildDir=$PWD\build\EpinoxVoxEngine_artefacts\Release" "Installer\windows\EpinoxVoxEngine.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPINOX-VOX-ENGINE-Windows-Installer
+          path: dist/*.exe
+          if-no-files-found: error
+
+      - name: Upload VST3 folder (manual install)
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPINOX-VOX-ENGINE-Windows-VST3
+          path: build/EpinoxVoxEngine_artefacts/Release/VST3
+          if-no-files-found: error
+
+  macos:
+    name: macOS (VST3 + AU + installer)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        run: |
+          VERSION=$(sed -n 's/.*project(EPINOX_VOX_ENGINE VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          echo "EPINOX_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: cmake -B build -DEPINOX_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Build installer
+        run: bash Installer/macos/build-pkg.sh "$EPINOX_VERSION" build/EpinoxVoxEngine_artefacts/Release dist
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPINOX-VOX-ENGINE-macOS-Installer
+          path: dist/*.pkg
+          if-no-files-found: error

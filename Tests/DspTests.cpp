@@ -1,0 +1,718 @@
+// Numerical checks of the VOX ENGINE audio engines. Exit code is the number of failed checks.
+#include <juce_dsp/juce_dsp.h>
+#include <cmath>
+#include <cstdio>
+#include <string>
+#include <vector>
+#include "DSP/VoxEngine.h"
+#include "Voice/PhraseRenderer.h"
+
+using namespace epinox::dsp;
+
+namespace
+{
+int failures = 0;
+constexpr double sr = 44100.0;
+constexpr double twoPi = 6.283185307179586;
+
+void check (bool ok, const std::string& what)
+{
+    std::printf ("%s  %s\n", ok ? "ok  " : "FAIL", what.c_str());
+
+    if (! ok)
+        ++failures;
+}
+
+std::string fmt (const char* f, double a, double b = 0.0, double c = 0.0)
+{
+    char buf[256];
+    std::snprintf (buf, sizeof (buf), f, a, b, c);
+    return buf;
+}
+
+std::vector<float> sine (double freq, double amp, int n)
+{
+    std::vector<float> v (static_cast<size_t> (n));
+
+    for (int i = 0; i < n; ++i)
+        v[static_cast<size_t> (i)] = static_cast<float> (amp * std::sin (twoPi * freq * i / sr));
+
+    return v;
+}
+
+// Harmonic signal with two formant-like humps (700 Hz and 2200 Hz) on a 150 Hz fundamental.
+std::vector<float> vowel (int n)
+{
+    std::vector<float> v (static_cast<size_t> (n), 0.0f);
+
+    for (int h = 1; h <= 60; ++h)
+    {
+        const double f = 150.0 * h;
+        const double a = std::exp (-std::pow ((f - 700.0) / 300.0, 2.0)) + 0.3 * std::exp (-std::pow ((f - 2200.0) / 500.0, 2.0));
+
+        for (int i = 0; i < n; ++i)
+            v[static_cast<size_t> (i)] += static_cast<float> (0.15 * a * std::sin (twoPi * f * i / sr));
+    }
+
+    return v;
+}
+
+double rms (const std::vector<float>& v, int a, int b)
+{
+    double s = 0.0;
+
+    for (int i = a; i < b; ++i)
+        s += static_cast<double> (v[static_cast<size_t> (i)]) * v[static_cast<size_t> (i)];
+
+    return std::sqrt (s / (b - a));
+}
+
+double zeroCrossingFrequency (const std::vector<float>& v, int a, int b)
+{
+    int crossings = 0;
+
+    for (int i = a + 1; i < b; ++i)
+        if (v[static_cast<size_t> (i - 1)] < 0.0f && v[static_cast<size_t> (i)] >= 0.0f)
+            ++crossings;
+
+    return crossings / ((b - a) / sr);
+}
+
+int bestLag (const std::vector<float>& x, const std::vector<float>& y, int a, int b, int lagMin, int lagMax)
+{
+    std::vector<double> value (static_cast<size_t> (lagMax - lagMin + 1));
+    double top = -1.0e30;
+
+    for (int lag = lagMin; lag <= lagMax; ++lag)
+    {
+        double s = 0.0;
+
+        for (int i = a; i < b; ++i)
+            s += static_cast<double> (x[static_cast<size_t> (i)]) * y[static_cast<size_t> (i + lag)];
+
+        value[static_cast<size_t> (lag - lagMin)] = s;
+        top = std::max (top, s);
+    }
+
+    // First local maximum that reaches 90 % of the best value (avoids picking a multiple of the period).
+    for (int lag = lagMin + 1; lag < lagMax; ++lag)
+    {
+        const double v = value[static_cast<size_t> (lag - lagMin)];
+
+        if (v >= 0.9 * top && v >= value[static_cast<size_t> (lag - lagMin - 1)] && v >= value[static_cast<size_t> (lag - lagMin + 1)])
+            return lag;
+    }
+
+    return lagMin;
+}
+
+double spectralCentroid (const std::vector<float>& v, int start)
+{
+    constexpr int order = 13, n = 1 << order;
+    juce::dsp::FFT fft (order);
+    std::vector<float> data (2 * n, 0.0f);
+
+    for (int i = 0; i < n; ++i)
+    {
+        const double w = 0.5 - 0.5 * std::cos (twoPi * i / n);
+        data[static_cast<size_t> (i)] = static_cast<float> (w * v[static_cast<size_t> (start + i)]);
+    }
+
+    fft.performRealOnlyForwardTransform (data.data(), true);
+
+    double num = 0.0, den = 0.0;
+
+    for (int k = 1; k < n / 2; ++k)
+    {
+        const double f = k * sr / n;
+
+        if (f < 100.0 || f > 6000.0)
+            continue;
+
+        const double m = std::hypot (static_cast<double> (data[static_cast<size_t> (2 * k)]),
+                                     static_cast<double> (data[static_cast<size_t> (2 * k + 1)]));
+        num += f * m;
+        den += m;
+    }
+
+    return num / den;
+}
+
+std::vector<float> runVoice (const std::vector<float>& in, float pitch, float formant)
+{
+    SpectralVoice v;
+    v.prepare (sr);
+    v.setShift (pitch, formant);
+
+    std::vector<float> out (in.size());
+
+    for (size_t i = 0; i < in.size(); ++i)
+        out[i] = v.processSample (in[i]);
+
+    return out;
+}
+
+bool allFinite (const std::vector<float>& v, float limit)
+{
+    for (float s : v)
+        if (! std::isfinite (s) || std::abs (s) > limit)
+            return false;
+
+    return true;
+}
+
+void testSpectralVoice()
+{
+    const int n = static_cast<int> (sr * 2.0);
+    const auto in = sine (440.0, 0.5, n);
+
+    const auto id = runVoice (in, 0.0f, 0.0f);
+    {
+        juce::Random rng (7);
+        std::vector<float> noise (static_cast<size_t> (n));
+
+        for (auto& v : noise)
+            v = rng.nextFloat() - 0.5f;
+
+        const auto delayed = runVoice (noise, 0.0f, 0.0f);
+        const int lag = bestLag (noise, delayed, 20000, 40000, 1200, 2600);
+        check (lag == SpectralVoice::latency, fmt ("identity latency is %.0f samples (expected %.0f)", lag, SpectralVoice::latency));
+    }
+
+    check (std::abs (rms (id, 30000, 60000) / rms (in, 30000, 60000) - 1.0) < 0.05,
+           fmt ("identity gain %.3f (expected 1.0 +- 0.05)", rms (id, 30000, 60000) / rms (in, 30000, 60000)));
+
+    const auto up = runVoice (in, 12.0f, 0.0f);
+    const double fUp = zeroCrossingFrequency (up, 40000, 80000);
+    check (std::abs (fUp - 880.0) < 12.0, fmt ("+12 st turns 440 Hz into %.1f Hz (expected 880)", fUp));
+
+    const auto down = runVoice (in, -5.0f, 0.0f);
+    const double fDown = zeroCrossingFrequency (down, 40000, 80000);
+    check (std::abs (fDown - 329.6) < 8.0, fmt ("-5 st turns 440 Hz into %.1f Hz (expected 329.6)", fDown));
+
+    const auto voiced = vowel (n);
+    const double base = spectralCentroid (voiced, 30000);
+
+    const auto formantUp = runVoice (voiced, 0.0f, 4.0f);
+    const double cUp = spectralCentroid (formantUp, 30000 + SpectralVoice::latency);
+    check (cUp / base > 1.10 && cUp / base < 1.50, fmt ("formant +4 st moves the spectral centroid by x%.2f (expected 1.1 to 1.5)", cUp / base));
+    const int f0lag = bestLag (formantUp, formantUp, 40000, 60000, 150, 600);
+    check (std::abs (f0lag - sr / 150.0) < 4.0, fmt ("formant shift keeps pitch: period %.0f samples (expected 294)", f0lag));
+
+    const auto pitchUp = runVoice (voiced, 7.0f, 0.0f);
+    const double lvl = rms (pitchUp, 40000, 80000) / rms (voiced, 40000, 80000);
+    check (lvl > 0.5 && lvl < 2.0, fmt ("+7 st on a voice keeps the level (ratio %.2f, expected 0.5 to 2.0)", lvl));
+    const int p7lag = bestLag (pitchUp, pitchUp, 40000, 60000, 100, 600);
+    check (std::abs (p7lag - sr / (150.0 * std::pow (2.0, 7.0 / 12.0))) < 4.0,
+           fmt ("+7 st period %.0f samples (expected 196)", p7lag));
+    const double cPitch = spectralCentroid (pitchUp, 30000 + SpectralVoice::latency);
+    check (cPitch / base < 1.30, fmt ("formants stay put when pitch shifts: centroid x%.2f (< 1.30; would be about 1.5 without preservation)", cPitch / base));
+
+    check (allFinite (runVoice (in, 24.0f, -12.0f), 4.0f) && allFinite (runVoice (in, -24.0f, 12.0f), 4.0f),
+           "extreme pitch/formant stays finite and bounded");
+}
+
+void testChop()
+{
+    const int n = static_cast<int> (sr * 2.0);
+    auto run = [&] (int steps)
+    {
+        auto l = sine (1000.0, 0.5, n);
+        auto r = l;
+        ChopEngine chop;
+        chop.prepare (sr);
+        chop.process (l.data(), r.data(), n, true, 8.0f, steps, 0.2f, 1.0f);
+
+        double lo = 1.0e9, hi = 0.0;
+
+        for (int a = 4000; a + 441 < n; a += 441)
+        {
+            const double e = rms (l, a, a + 441);
+            lo = std::min (lo, e);
+            hi = std::max (hi, e);
+        }
+
+        return std::pair<double, double> { lo, hi };
+    };
+
+    const auto p16 = run (16);
+    check (p16.first < 0.05 && p16.second > 0.3, fmt ("16-step chop opens and closes (min %.3f, max %.3f)", p16.first, p16.second));
+    const auto p1 = run (1);
+    check (p1.first > 0.3, fmt ("1-step chop never closes (min %.3f)", p1.first));
+}
+
+void testEffects()
+{
+    const int n = static_cast<int> (sr);
+
+    {
+        std::vector<float> l (static_cast<size_t> (n), 0.0f), r = l;
+        l[0] = r[0] = 1.0f;
+        EffectsEngine fx;
+        fx.prepare (sr);
+        fx.process (l.data(), r.data(), n, true, 0.0f, 1.0f, 0.0f, 1.0f, 120.0f);
+
+        int idx = 0;
+        float peak = 0.0f;
+
+        for (int i = 5000; i < 25000; ++i)
+            if (std::abs (l[static_cast<size_t> (i)]) > peak)
+            {
+                peak = std::abs (l[static_cast<size_t> (i)]);
+                idx = i;
+            }
+
+        check (std::abs (idx - 16537) <= 3 && peak > 0.2f, fmt ("delay echo at sample %.0f (expected 16537), level %.2f", idx, peak));
+    }
+
+    {
+        const int m = 4000;
+        std::vector<float> l (static_cast<size_t> (m)), r (static_cast<size_t> (m));
+
+        for (int i = 0; i < m; ++i)
+        {
+            l[static_cast<size_t> (i)] = 0.5f;
+            r[static_cast<size_t> (i)] = -0.2f;
+        }
+
+        EffectsEngine fx;
+        fx.prepare (sr);
+        fx.process (l.data(), r.data(), m, true, 0.0f, 0.0f, 0.0f, 0.0f, 120.0f);
+        check (std::abs (l[3900] - r[3900]) < 1.0e-3f, "width 0 collapses the signal to mono");
+    }
+
+    {
+        auto l = sine (440.0, 0.5, n);
+        auto r = l;
+        const double before = rms (l, 5000, n);
+        EffectsEngine fx;
+        fx.prepare (sr);
+        fx.process (l.data(), r.data(), n, true, 0.0f, 0.0f, 0.0f, 1.0f, 120.0f);
+        check (std::abs (rms (l, 5000, n) / before - 1.0) < 0.03, fmt ("effects with all amounts at zero are transparent (gain %.3f)", rms (l, 5000, n) / before));
+    }
+
+    {
+        auto l = sine (220.0, 1.0, n);
+        auto r = l;
+        EffectsEngine fx;
+        fx.prepare (sr);
+        fx.process (l.data(), r.data(), n, true, 0.0f, 0.0f, 1.0f, 1.0f, 120.0f);
+        double peak = 0.0;
+
+        for (int i = 1000; i < n; ++i)
+            peak = std::max (peak, static_cast<double> (std::abs (l[static_cast<size_t> (i)])));
+
+        check (peak <= 1.01 && rms (l, 1000, n) > 0.85, fmt ("distortion is bounded (peak %.3f) and squares the wave (rms %.3f)", peak, rms (l, 1000, n)));
+    }
+
+    {
+        std::vector<float> l (static_cast<size_t> (n), 0.0f), r = l;
+        l[0] = r[0] = 1.0f;
+        EffectsEngine fx;
+        fx.prepare (sr);
+        fx.process (l.data(), r.data(), n, true, 1.0f, 0.0f, 0.0f, 1.0f, 120.0f);
+        check (rms (l, 3000, 20000) > 1.0e-4, fmt ("reverb produces a tail (rms %.5f)", rms (l, 3000, 20000)));
+    }
+}
+
+void testSpatial()
+{
+    const int n = static_cast<int> (sr * 3.0);
+
+    {
+        std::vector<float> l (static_cast<size_t> (n), 0.0f), r = l;
+        l[0] = r[0] = 1.0f;
+        SpatialEngine sp;
+        sp.prepare (sr);
+        sp.process (l.data(), r.data(), n, true, 0.8f, 0.7f, 0.0f, 1.0f);
+
+        const double early = rms (l, 13230, 26460);
+        const double late = rms (l, 66150, 79380);
+        check (early > 1.0e-5 && late < early && allFinite (l, 10.0f), fmt ("spatial tail decays (0.3 s %.6f, 1.5 s %.6f)", early, late));
+    }
+
+    {
+        auto measure = [&] (float ducking)
+        {
+            auto in = sine (220.0, 0.5, n);
+            auto l = in, r = in;
+            SpatialEngine sp;
+            sp.prepare (sr);
+            sp.process (l.data(), r.data(), n, true, 0.7f, 0.5f, ducking, 1.0f);
+
+            std::vector<float> diff (l.size());
+
+            for (size_t i = 0; i < l.size(); ++i)
+                diff[i] = l[i] - in[i];
+
+            return rms (diff, 20000, n);
+        };
+
+        const double open = measure (0.0f), ducked = measure (1.0f);
+        check (ducked < 0.5 * open, fmt ("ducking lowers the tail while the input plays (%.4f -> %.4f)", open, ducked));
+    }
+}
+
+void testEngine()
+{
+    const int n = static_cast<int> (sr * 3.0);
+    juce::Random rng (42);
+    std::vector<float> noise (static_cast<size_t> (n));
+
+    for (auto& s : noise)
+        s = rng.nextFloat() - 0.5f;
+
+    auto runEngine = [&] (const EngineParams& p)
+    {
+        VoxEngine engine;
+        engine.prepare (sr, 512);
+
+        juce::AudioBuffer<float> buf (2, n);
+
+        for (int i = 0; i < n; ++i)
+        {
+            buf.setSample (0, i, noise[static_cast<size_t> (i)]);
+            buf.setSample (1, i, noise[static_cast<size_t> (i)]);
+        }
+
+        const int sizes[] = { 1000, 333, 64, 2048, 477 };
+        int pos = 0, k = 0;
+
+        while (pos < n)
+        {
+            const int len = std::min (sizes[k++ % 5], n - pos);
+            juce::AudioBuffer<float> view (buf.getArrayOfWritePointers(), 2, pos, len);
+            engine.process (view, p);
+            pos += len;
+        }
+
+        std::vector<float> out (static_cast<size_t> (n));
+
+        for (int i = 0; i < n; ++i)
+            out[static_cast<size_t> (i)] = buf.getSample (0, i);
+
+        return out;
+    };
+
+    {
+        EngineParams p;
+        p.mix = 0.0f;
+        p.fxReverb = p.fxDelay = p.spMix = 1.0f;
+        const auto out = runEngine (p);
+        double maxDiff = 0.0;
+
+        for (int i = 0; i < n; ++i)
+        {
+            const float expected = i >= VoxEngine::latencySamples ? noise[static_cast<size_t> (i - VoxEngine::latencySamples)] : 0.0f;
+            maxDiff = std::max (maxDiff, static_cast<double> (std::abs (out[static_cast<size_t> (i)] - expected)));
+        }
+
+        check (maxDiff < 1.0e-6, fmt ("mix 0 returns the input delayed by exactly the reported latency (max diff %.2e)", maxDiff));
+    }
+
+    {
+        EngineParams p;
+        p.power = false;
+        const auto out = runEngine (p);
+        double maxDiff = 0.0;
+
+        for (int i = VoxEngine::latencySamples; i < n; ++i)
+            maxDiff = std::max (maxDiff, static_cast<double> (std::abs (out[static_cast<size_t> (i)] - noise[static_cast<size_t> (i - VoxEngine::latencySamples)])));
+
+        check (maxDiff < 1.0e-6, fmt ("power off passes the delayed dry signal (max diff %.2e)", maxDiff));
+    }
+
+    {
+        EngineParams p;
+        p.mix = 1.0f;
+        p.pitch = 24.0f;
+        p.formant = -12.0f;
+        p.chopRate = 32.0f;
+        p.chopSteps = 64;
+        p.trPitch = -24.0f;
+        p.trFormant = 12.0f;
+        p.trRobot = p.trGrain = 1.0f;
+        p.fxReverb = p.fxDelay = p.fxDistort = 1.0f;
+        p.fxWidth = 2.0f;
+        p.spSize = p.spDensity = p.spDucking = p.spMix = 1.0f;
+        p.bpm = 40.0f;
+        check (allFinite (runEngine (p), 50.0f), "every control at its extreme stays finite and bounded");
+    }
+}
+
+void testGeneratedInput()
+{
+    const int len = 20000, n = 30000;
+    juce::Random rng (11);
+    std::vector<float> gl (static_cast<size_t> (len)), gr (static_cast<size_t> (len));
+
+    for (int i = 0; i < len; ++i)
+    {
+        gl[static_cast<size_t> (i)] = (rng.nextFloat() - 0.5f) * 0.5f;
+        gr[static_cast<size_t> (i)] = (rng.nextFloat() - 0.5f) * 0.5f;
+    }
+
+    auto run = [&] (bool play, int startPos)
+    {
+        VoxEngine engine;
+        engine.prepare (sr, 512);
+
+        EngineParams p;
+        p.mix = 1.0f;
+        p.chopOn = false;
+
+        GeneratedInput gen;
+        gen.left = gl.data();
+        gen.right = gr.data();
+        gen.length = len;
+        gen.startPos = startPos;
+        gen.play = play;
+
+        juce::AudioBuffer<float> buf (2, n);
+        buf.clear();
+        engine.process (buf, p, gen);
+
+        std::vector<float> out (static_cast<size_t> (n));
+
+        for (int i = 0; i < n; ++i)
+            out[static_cast<size_t> (i)] = buf.getSample (0, i);
+
+        return out;
+    };
+
+    {
+        const int start = 15000;   // starts near the end of the loop, so the block wraps around
+        const auto out = run (true, start);
+        double maxDiff = 0.0;
+
+        for (int i = 1000; i < n - VoxEngine::latencySamples; ++i)
+        {
+            const float expected = gl[static_cast<size_t> ((start + i) % len)];
+            maxDiff = std::max (maxDiff, static_cast<double> (std::abs (out[static_cast<size_t> (i + VoxEngine::latencySamples)] - expected)));
+        }
+
+        check (maxDiff < 2.0e-3, fmt ("generated vocal plays from the requested loop position and wraps (max diff %.2e)", maxDiff));
+    }
+
+    {
+        const auto out = run (false, 0);
+        check (rms (out, 0, n) < 1.0e-6, "generated vocal is silent while the transport is stopped");
+    }
+}
+
+//==============================================================================
+// Vocal generator
+double periodicity (const std::vector<float>& x, int a, int b)
+{
+    double energy = 0.0;
+
+    for (int i = a; i < b; ++i)
+        energy += static_cast<double> (x[static_cast<size_t> (i)]) * x[static_cast<size_t> (i)];
+
+    double best = 0.0;
+
+    for (int lag = 80; lag <= 600; ++lag)
+    {
+        double s = 0.0;
+
+        for (int i = a; i < b - lag; ++i)
+            s += static_cast<double> (x[static_cast<size_t> (i)]) * x[static_cast<size_t> (i + lag)];
+
+        best = std::max (best, s);
+    }
+
+    return best / std::max (1.0e-12, energy);
+}
+
+std::unique_ptr<epinox::GeneratedClip> renderVowel (char vowel, float midi, int voiceType)
+{
+    epinox::voice::Composition comp;
+    epinox::voice::Syllable s;
+    s.vowel = vowel;
+    comp.syllables.push_back (s);
+    comp.notes.push_back ({ 0.0, 8.0, midi, 1.0f, 0 });
+    comp.loopBeats = 8.0;
+
+    epinox::GenerationRequest rq;
+    rq.voiceType = voiceType;
+    rq.emotion = 9;       // Robotic emotion: no vibrato, no scoop
+    rq.style = 5;
+    rq.bpm = 120.0;
+    rq.sampleRate = sr;
+    return epinox::voice::VocalSynth::render (comp, rq, {});
+}
+
+// Frequency of the strongest spectral peak inside [lo, hi] Hz, measured on a steady part of the clip.
+double peakFrequency (const std::vector<float>& v, double lo, double hi)
+{
+    constexpr int order = 15, n = 1 << order;
+    juce::dsp::FFT fft (order);
+    std::vector<float> data (2 * n, 0.0f);
+
+    for (int i = 0; i < n; ++i)
+        data[static_cast<size_t> (i)] = static_cast<float> ((0.5 - 0.5 * std::cos (twoPi * i / n)) * v[static_cast<size_t> (30000 + i)]);
+
+    fft.performRealOnlyForwardTransform (data.data(), true);
+
+    double best = 0.0, bestF = 0.0;
+
+    for (int k = 1; k < n / 2; ++k)
+    {
+        const double f = k * sr / n;
+
+        if (f < lo || f > hi)
+            continue;
+
+        const double m = std::hypot (static_cast<double> (data[static_cast<size_t> (2 * k)]), static_cast<double> (data[static_cast<size_t> (2 * k + 1)]));
+
+        if (m > best)
+        {
+            best = m;
+            bestF = f;
+        }
+    }
+
+    return bestF;
+}
+
+void testVoiceGenerator()
+{
+    using epinox::voice::PhraseParser;
+
+    check (PhraseParser::parse ("Take me higher").size() == 4, "parser: 'Take me higher' has 4 syllables");
+    check (PhraseParser::parse ("Hello world").size() == 3, "parser: 'Hello world' has 3 syllables");
+    check (PhraseParser::parse ("Eu vou te levar pra longe daqui").size() == 10, "parser: Portuguese phrase has 10 syllables");
+    check (PhraseParser::parse ("Coração").size() == 3, "parser: accents are handled ('Coração' = 3 syllables)");
+    check (PhraseParser::parse ("").empty() && PhraseParser::parse ("123 !!! ?").empty(), "parser: no letters means no syllables");
+
+    {
+        const auto a = renderVowel ('a', 57.0f, 1);
+        const int period = bestLag (a->left, a->left, 44100, 88200, 150, 300);
+        const double f0 = sr / period;
+        check (std::abs (f0 - 220.0) < 3.0, fmt ("sung A3 has f0 %.1f Hz (expected 220)", f0));
+
+        const auto high = renderVowel ('a', 69.0f, 0);
+        const int period2 = bestLag (high->left, high->left, 44100, 88200, 60, 150);
+        check (std::abs (sr / period2 - 440.0) < 8.0, fmt ("sung A4 has f0 %.1f Hz (expected 440)", sr / period2));
+    }
+
+    {
+        const auto a = renderVowel ('a', 45.0f, 1);
+        const auto i = renderVowel ('i', 45.0f, 1);
+        const double f1a = peakFrequency (a->left, 150.0, 1500.0);
+        const double f1i = peakFrequency (i->left, 150.0, 1500.0);
+        const double f2i = peakFrequency (i->left, 1500.0, 3500.0);
+        check (f1a > 580.0 && f1a < 880.0, fmt ("vowel 'a' has its first formant near %.0f Hz (expected 730)", f1a));
+        check (f1i > 120.0 && f1i < 420.0, fmt ("vowel 'i' has its first formant near %.0f Hz (expected 270)", f1i));
+        check (f2i > 2000.0 && f2i < 2600.0, fmt ("vowel 'i' has its second formant near %.0f Hz (expected 2290)", f2i));
+    }
+
+    {
+        epinox::GenerationRequest r;
+        r.phrase = "mama";
+        r.sampleRate = sr;
+        r.style = 0;
+        r.voiceType = 1;
+        const auto voiced = epinox::voice::renderPhrase (r);
+        r.voiceType = 7;
+        const auto whisper = epinox::voice::renderPhrase (r);
+        const int n = voiced->length();
+        const double pv = periodicity (voiced->left, n / 8, n / 8 + 8000);
+        const double pw = periodicity (whisper->left, n / 8, n / 8 + 8000);
+        check (pv > 0.7 && pw < 0.4, fmt ("voiced periodicity %.2f vs whisper %.2f (expected > 0.7 and < 0.4)", pv, pw));
+    }
+
+    {
+        epinox::GenerationRequest r;
+        r.phrase = "Take me higher";
+        r.sampleRate = sr;
+        r.bpm = 124.0;
+        const auto a = epinox::voice::renderPhrase (r);
+        const auto b = epinox::voice::renderPhrase (r);
+        bool same = a->left == b->left && a->right == b->right;
+        r.variation = 1;
+        const auto c = epinox::voice::renderPhrase (r);
+        check (same, "same request renders identical audio (projects reload exactly)");
+        check (c->left != a->left, "a new variation renders different audio");
+
+        const int expected = static_cast<int> (std::ceil (a->loopBeats * 60.0 / 124.0 * sr));
+        check (a->length() == expected && std::fmod (a->loopBeats, 4.0) == 0.0,
+               fmt ("clip loops over whole bars (%.0f beats, %.0f samples)", a->loopBeats, a->length()));
+    }
+
+    {
+        int silent = 0, bad = 0, total = 0;
+
+        auto run = [&] (int genre, int voice, int emotion, int style)
+        {
+            epinox::GenerationRequest r;
+            r.phrase = "Rise up tonight";
+            r.sampleRate = sr;
+            r.genre = genre;
+            r.voiceType = voice;
+            r.emotion = emotion;
+            r.style = style;
+            r.bpm = 128.0;
+            const auto c = epinox::voice::renderPhrase (r);
+            ++total;
+
+            if (c == nullptr || c->length() == 0)
+            {
+                ++bad;
+                return;
+            }
+
+            float peak = 0.0f;
+
+            for (size_t i = 0; i < c->left.size(); ++i)
+            {
+                if (! std::isfinite (c->left[i]) || ! std::isfinite (c->right[i]))
+                {
+                    ++bad;
+                    return;
+                }
+
+                peak = std::max (peak, std::abs (c->left[i]));
+            }
+
+            if (peak < 0.3f || peak > 0.71f)
+                ++silent;
+        };
+
+        for (int i = 0; i < 10; ++i) run (i, 0, 0, 5);
+        for (int i = 0; i < 10; ++i) run (0, i, 0, 5);
+        for (int i = 0; i < 12; ++i) run (0, 0, i, 5);
+        for (int i = 0; i < 10; ++i) run (0, 0, 0, i);
+
+        check (bad == 0 && silent == 0, fmt ("all %.0f genre/voice/emotion/style choices render finite audio at the target level (bad %.0f, off-level %.0f)", total, bad, silent));
+    }
+
+    {
+        epinox::GenerationRequest r;
+        r.phrase = "this is a very long phrase that does not fit in eight bars at all so it must be truncated safely";
+        r.sampleRate = sr;
+        r.style = 1;
+        const auto c = epinox::voice::renderPhrase (r);
+        check (c != nullptr && c->truncated > 0 && c->loopBeats <= 32.0, "very long phrases are truncated to the 8 bar limit");
+
+        int calls = 0;
+        r.phrase = "cancel me";
+        const auto cancelled = epinox::voice::renderPhrase (r, [&] { ++calls; return true; });
+        check (cancelled == nullptr && calls > 0, "rendering can be cancelled");
+    }
+}
+} // namespace
+
+int main()
+{
+    testSpectralVoice();
+    testChop();
+    testEffects();
+    testSpatial();
+    testEngine();
+    testGeneratedInput();
+    testVoiceGenerator();
+
+    std::printf ("\n%s (%d failed)\n", failures == 0 ? "ALL CHECKS PASSED" : "SOME CHECKS FAILED", failures);
+    return failures;
+}
