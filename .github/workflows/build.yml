@@ -49,14 +49,14 @@ jobs:
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: EPINOX-VOX-ENGINE-Windows-Installer
+          name: EPINOX-VOX-ENGINE-${{ env.EPINOX_VERSION }}-Windows-Installer
           path: dist/*.exe
           if-no-files-found: error
 
       - name: Upload VST3 folder (manual install)
         uses: actions/upload-artifact@v4
         with:
-          name: EPINOX-VOX-ENGINE-Windows-VST3
+          name: EPINOX-VOX-ENGINE-${{ env.EPINOX_VERSION }}-Windows-VST3
           path: build/EpinoxVoxEngine_artefacts/Release/VST3
           if-no-files-found: error
 
@@ -86,6 +86,6 @@ jobs:
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: EPINOX-VOX-ENGINE-macOS-Installer
+          name: EPINOX-VOX-ENGINE-${{ env.EPINOX_VERSION }}-macOS-Installer
           path: dist/*.pkg
           if-no-files-found: error

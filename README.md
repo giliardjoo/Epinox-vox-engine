@@ -24,7 +24,7 @@ Every push to `main` builds both platforms on GitHub (Actions tab) and produces:
 - **macOS:** `EPINOX-VOX-ENGINE-<version>.pkg` (`Installer/macos`), with VST3, Audio Unit and standalone app. It is not
   notarized yet, so macOS asks for a confirmation the first time (System Settings, Privacy and Security, Open Anyway).
 
-To download: GitHub, Actions tab, open the latest run, scroll to Artifacts, download `EPINOX-VOX-ENGINE-Windows-Installer`
+To download: GitHub, Actions tab, open the latest run, scroll to Artifacts, download `EPINOX-VOX-ENGINE-<version>-Windows-Installer`
 (it is a zip with the .exe inside). Close Ableton before installing an update, because it keeps the plugin file in use.
 In Ableton: Preferences, Plug-Ins, turn on "Use VST3 System Folders" and press Rescan.
 
