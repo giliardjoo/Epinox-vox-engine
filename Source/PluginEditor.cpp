@@ -27,6 +27,9 @@ public:
           pitchKnob    (p.apvts, pid::pitch,   "PITCH",   " st", 1),
           formantKnob  (p.apvts, pid::formant, "FORMANT", " st", 1),
           bpmKnob      (p.apvts, pid::bpm,     "BPM",     "",    1),
+          legatoKnob   (p.apvts, pid::legato,  "LEGATO",  " %",  0),
+          bodyKnob     (p.apvts, pid::body,    "BODY",    " %",  0),
+          layersKnob   (p.apvts, pid::layers,  "LAYERS",  " %",  0),
           mixKnob      (p.apvts, pid::mix,     "MIX",     " %",  0, true),
           outKnob      (p.apvts, pid::outGain, "OUTPUT",  " dB", 1),
           waveform (p),
@@ -98,7 +101,7 @@ public:
 
         for (auto* c : std::initializer_list<juce::Component*> {
                  &genreList, &phrase, &generateButton,
-                 &voiceCombo, &emotionCombo, &styleCombo, &keyCombo, &scaleCombo, &pitchKnob, &formantKnob, &bpmKnob,
+                 &voiceCombo, &emotionCombo, &styleCombo, &keyCombo, &scaleCombo, &pitchKnob, &formantKnob, &bpmKnob, &legatoKnob, &bodyKnob, &layersKnob,
                  &mixKnob, &outKnob, &waveform, &meterIn, &meterOut,
                  &chopPanel, &transformPanel, &effectsPanel, &spatialPanel,
                  &prevButton, &nextButton, &saveButton, &openButton, &powerButton,
@@ -189,9 +192,13 @@ public:
         emotionCombo.setBounds (444, 144, 196, 46);
         styleCombo.setBounds   (652, 144, 196, 46);
 
-        pitchKnob.setBounds   (236, 200, 196, 128);
-        formantKnob.setBounds (444, 200, 196, 128);
-        bpmKnob.setBounds     (652, 200, 196, 128);
+        // Six knobs in one row: the three voice knobs, then the three that give the vocal its body.
+        {
+            NeonKnob* row[] = { &pitchKnob, &formantKnob, &bpmKnob, &legatoKnob, &bodyKnob, &layersKnob };
+
+            for (int i = 0; i < 6; ++i)
+                row[i]->setBounds (236 + i * 102, 200, 102, 128);
+        }
 
         keyCombo.setBounds   (236, 332, 196, 46);
         scaleCombo.setBounds (444, 332, 404, 46);
@@ -320,6 +327,9 @@ private:
         request.key       = static_cast<int> (get (pid::key));
         request.scale     = static_cast<int> (get (pid::scale));
         request.bpm       = get (pid::bpm);
+        request.legato    = get (pid::legato) / 100.0f;
+        request.body      = get (pid::body) / 100.0f;
+        request.layers    = get (pid::layers) / 100.0f;
 
         // When the host reports a tempo, the vocal is generated at that tempo and the BPM knob follows it.
         const double hostBpm = proc.getHostBpm();
@@ -403,7 +413,7 @@ private:
     juce::Label presetLabel, statusLabel;
 
     NeonCombo voiceCombo, emotionCombo, styleCombo, keyCombo, scaleCombo;
-    NeonKnob pitchKnob, formantKnob, bpmKnob, mixKnob, outKnob;
+    NeonKnob pitchKnob, formantKnob, bpmKnob, legatoKnob, bodyKnob, layersKnob, mixKnob, outKnob;
     WaveformView waveform;
     MeterBar meterIn, meterOut;
     ModulePanel chopPanel, transformPanel, effectsPanel, spatialPanel;

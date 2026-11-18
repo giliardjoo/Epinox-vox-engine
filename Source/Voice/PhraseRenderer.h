@@ -20,7 +20,7 @@ inline std::unique_ptr<GeneratedClip> renderPhrase (const GenerationRequest& r, 
     const juce::int64 seed = r.phrase.trim().toLowerCase().hashCode64()
                              + static_cast<juce::int64> (r.variation) * 0x9E3779B97F4A7C15LL;
 
-    auto composition = Composer::compose (std::move (syllables), r.genre, r.style, r.emotion, r.voiceType, seed, r.key, r.scale);
+    auto composition = Composer::compose (std::move (syllables), r.genre, r.style, r.emotion, r.voiceType, seed, r.key, r.scale, r.legato);
     return VocalSynth::render (composition, r, cancelled);
 }
 } // namespace epinox::voice

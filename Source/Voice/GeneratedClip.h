@@ -10,6 +10,7 @@ struct GenerationRequest
 {
     juce::String phrase;
     int genre = 0, voiceType = 0, emotion = 0, style = 0;
+    float legato = 0.0f, body = 0.0f, layers = 0.0f;   // 0..1: connected notes, low-mid warmth, doubled voices
     int key = 9;                     // 0 = C ... 11 = B (default A)
     int scale = 0;                   // 0 = follow the genre, 1.. = forced scale (see scaleNames)
     double bpm = 128.0;

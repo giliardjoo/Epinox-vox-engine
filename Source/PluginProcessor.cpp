@@ -7,13 +7,15 @@ namespace
     // Settings of the generated vocal, stored inside the project state so it can be rebuilt exactly.
     const juce::Identifier genValid ("gen_valid"), genPhrase ("gen_phrase"), genGenre ("gen_genre"),
         genVoice ("gen_voice"), genEmotion ("gen_emotion"), genStyle ("gen_style"), genBpm ("gen_bpm"),
-        genVariation ("gen_variation"), genKey ("gen_key"), genScale ("gen_scale");
+        genVariation ("gen_variation"), genKey ("gen_key"), genScale ("gen_scale"),
+        genLegato ("gen_legato"), genBody ("gen_body"), genLayers ("gen_layers");
 
     juce::String keyFor (const epinox::GenerationRequest& r)
     {
         return r.phrase + "|" + juce::String (r.genre) + "|" + juce::String (r.voiceType) + "|" + juce::String (r.emotion)
                + "|" + juce::String (r.style) + "|" + juce::String (r.bpm, 3) + "|" + juce::String (static_cast<int> (r.variation))
-               + "|" + juce::String (r.key) + "|" + juce::String (r.scale);
+               + "|" + juce::String (r.key) + "|" + juce::String (r.scale)
+               + "|" + juce::String (r.legato, 3) + "|" + juce::String (r.body, 3) + "|" + juce::String (r.layers, 3);
     }
 
     epinox::GenerationRequest requestFromState (const juce::ValueTree& s, double sampleRate)
@@ -27,6 +29,9 @@ namespace
         r.bpm = s.getProperty (genBpm, 128.0);
         r.key = s.getProperty (genKey, 9);
         r.scale = s.getProperty (genScale, 0);
+        r.legato = s.getProperty (genLegato, 0.0);
+        r.body = s.getProperty (genBody, 0.0);
+        r.layers = s.getProperty (genLayers, 0.0);
         r.variation = static_cast<juce::uint32> (static_cast<int> (s.getProperty (genVariation, 0)));
         r.sampleRate = sampleRate;
         return r;
@@ -290,6 +295,9 @@ bool VoxProcessor::requestGeneration (epinox::GenerationRequest request)
             s.setProperty (genBpm, request.bpm, nullptr);
             s.setProperty (genKey, request.key, nullptr);
             s.setProperty (genScale, request.scale, nullptr);
+            s.setProperty (genLegato, request.legato, nullptr);
+            s.setProperty (genBody, request.body, nullptr);
+            s.setProperty (genLayers, request.layers, nullptr);
             s.setProperty (genVariation, static_cast<int> (request.variation), nullptr);
         }
 

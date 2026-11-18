@@ -623,6 +623,80 @@ void testVoiceGenerator()
     }
 
     {
+        // Legato, Body and Layers: more connected, warmer, thicker.
+        auto render = [&] (float legato, float body, float layers)
+        {
+            epinox::GenerationRequest q;
+            q.phrase = "take me higher tonight";
+            q.sampleRate = sr;
+            q.style = 7;                  // Chopped: lots of gaps to close
+            q.legato = legato;
+            q.body = body;
+            q.layers = layers;
+            return epinox::voice::renderPhrase (q);
+        };
+
+        auto active = [] (const std::vector<float>& x)
+        {
+            const int win = 441;
+            int on = 0, total = 0;
+
+            for (size_t i = 0; i + static_cast<size_t> (win) < x.size(); i += static_cast<size_t> (win))
+            {
+                double e = 0.0;
+
+                for (int j = 0; j < win; ++j)
+                    e += static_cast<double> (x[i + static_cast<size_t> (j)]) * x[i + static_cast<size_t> (j)];
+
+                on += (std::sqrt (e / win) > 0.01) ? 1 : 0;
+                ++total;
+            }
+
+            return static_cast<double> (on) / juce::jmax (1, total);
+        };
+
+        auto lowShare = [] (const std::vector<float>& x)
+        {
+            double lp = 0.0, eLow = 0.0, eAll = 0.0;
+            const double a = 1.0 - std::exp (-2.0 * juce::MathConstants<double>::pi * 300.0 / 44100.0);
+
+            for (auto v : x)
+            {
+                lp += a * (static_cast<double> (v) - lp);
+                eLow += lp * lp;
+                eAll += static_cast<double> (v) * v;
+            }
+
+            return eLow / juce::jmax (1.0e-9, eAll);
+        };
+
+        const auto loose = render (0.0f, 0.0f, 0.0f);
+        const auto tied = render (1.0f, 0.0f, 0.0f);
+        check (loose != nullptr && tied != nullptr && active (tied->left) > active (loose->left) + 0.05,
+               fmt ("legato fills the gaps: active time %.2f -> %.2f", active (loose->left), active (tied->left)));
+
+        const auto thin = render (0.5f, 0.0f, 0.0f);
+        const auto warm = render (0.5f, 1.0f, 0.0f);
+        check (lowShare (warm->left) > lowShare (thin->left) * 1.15,
+               fmt ("body adds low-mid warmth: share below 300 Hz %.3f -> %.3f", lowShare (thin->left), lowShare (warm->left)));
+
+        const auto single = render (0.5f, 0.0f, 0.0f);
+        const auto layered = render (0.5f, 0.0f, 1.0f);
+        double side = 0.0, mid = 0.0, side0 = 0.0, mid0 = 0.0;
+
+        for (size_t i = 0; i < layered->left.size(); ++i)
+        {
+            side += std::pow (layered->left[i] - layered->right[i], 2.0);
+            mid += std::pow (layered->left[i] + layered->right[i], 2.0);
+            side0 += std::pow (single->left[i] - single->right[i], 2.0);
+            mid0 += std::pow (single->left[i] + single->right[i], 2.0);
+        }
+
+        check (side / mid > 2.0 * (side0 / juce::jmax (1.0e-9, mid0)) + 1.0e-4,
+               fmt ("layers widen the voice: side/mid %.4f -> %.4f", side0 / juce::jmax (1.0e-9, mid0), side / mid));
+    }
+
+    {
         // Key and scale: every composed note belongs to the chosen scale, in every key, and the melody ends on the tonic.
         using namespace epinox::voice;
         bool allIn = true, endsOnTonic = true;

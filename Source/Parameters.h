@@ -17,6 +17,9 @@ namespace pid
     inline constexpr const char* pitch     = "pitch";
     inline constexpr const char* formant   = "formant";
     inline constexpr const char* bpm       = "bpm";
+    inline constexpr const char* legato    = "legato";
+    inline constexpr const char* body      = "body";
+    inline constexpr const char* layers    = "layers";
     inline constexpr const char* key       = "key";
     inline constexpr const char* scale     = "scale";
 
@@ -125,11 +128,14 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     addFloat (pid::pitch,   "Pitch",   -24.0f, 24.0f, 0.0f, "st");
     addFloat (pid::formant, "Formant", -12.0f, 12.0f, 0.0f, "st");
     addFloat (pid::bpm,     "BPM",      40.0f, 220.0f, 128.0f, "bpm");
+    addPct   (pid::legato, "Legato", 60.0f);
+    addPct   (pid::body,   "Body",   60.0f);
+    addPct   (pid::layers, "Layers", 40.0f);
 
-    addToggle (pid::chopOn, "Chop On", true);
+    addToggle (pid::chopOn, "Chop On", false);
     addFloat  (pid::chopRate, "Chop Rate", 0.5f, 32.0f, 8.0f, "Hz");
     layout.add (std::make_unique<API> (id (pid::chopSteps), "Chop Steps", 1, 64, 16));
-    addPct    (pid::chopSmooth, "Chop Smooth", 20.0f);
+    addPct    (pid::chopSmooth, "Chop Smooth", 50.0f);
     addPct    (pid::chopMix, "Chop Mix", 100.0f);
 
     addToggle (pid::trOn, "Transform On", true);

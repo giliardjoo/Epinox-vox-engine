@@ -86,6 +86,15 @@ breath noise, brighter tone when singing louder, a singer's formant around 3 kHz
 Each harmonic also carries the phase of the vocal tract resonators (v0.7), which rounds the glottal pulse and removes the
 sharp "buzz" of a plain harmonic stack. Robotic voices and the Robotic emotion stay perfectly regular and zero-phase on purpose.
 
+Body controls (v0.8), next to Pitch, Formant and BPM, applied at GENERATE time:
+
+- **Legato** (default 60 %): joins the notes. The voiced part of each note lasts longer, the release is softer, consonants are shorter
+  and fewer rests are inserted. 0 % keeps the style's own gaps.
+- **Body** (default 60 %): chest warmth. A low shelf around 230 Hz plus a soft saturation that thickens the harmonics.
+- **Layers** (default 40 %): doubles the voice with detuned, panned copies (2 or 3 voices) for a thicker, wider vocal. Robotic voices stay single.
+
+The Vocal Chop module is now off by default, because its gate cuts the vocal into pieces; factory presets that use it switch it on.
+
 Details worth knowing:
 
 - Pressing GENERATE again gives a new variation of the same phrase. The same phrase and settings always give the same audio.

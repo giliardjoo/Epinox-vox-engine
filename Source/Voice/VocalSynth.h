@@ -83,6 +83,19 @@ private:
             vibCents = flat ? 0.0f : V.vibratoCents * E.vibratoMul;
             attackSec = juce::jmax (0.002f, 0.5f * (V.attackMs + S.attackMs) * E.attackMul * 0.001f);
             glideTau = flat ? 0.001f : juce::jmax (0.001f, S.glideMs * 0.001f / 2.5f);
+
+            // Legato joins the notes: longer voiced part, softer release, shorter consonant gaps.
+            S.legato = S.legato + (1.0f - S.legato) * 0.85f * juce::jlimit (0.0f, 1.0f, r.legato);
+
+            // Layers double the voice with detuned, panned copies for a thicker, wider sound.
+            const float lay = juce::jlimit (0.0f, 1.0f, r.layers);
+            const int wanted = lay > 0.66f ? 3 : (lay > 0.2f ? 2 : 1);
+
+            if (! flat && wanted > V.unison)
+            {
+                V.unison = wanted;
+                V.unisonCents = juce::jmax (V.unisonCents, 5.0f + 9.0f * lay);
+            }
         }
 
         std::unique_ptr<GeneratedClip> run()
@@ -102,6 +115,8 @@ private:
 
             if (! synthesise (*clip, total))
                 return nullptr;
+
+            addBody (*clip, juce::jlimit (0.0f, 1.0f, req.body));
 
             normalise (*clip);
 
@@ -159,8 +174,10 @@ private:
                 const auto onset = specs (syl.onset), coda = specs (syl.coda);
                 double onsetSec = 0.0, codaSec = 0.0;
 
-                for (auto& c : onset) onsetSec += c.ms * 0.001;
-                for (auto& c : coda)  codaSec += c.ms * 0.001;
+                const double cs = 1.0 - 0.3 * juce::jlimit (0.0f, 1.0f, req.legato);   // legato shortens consonants
+
+                for (auto& c : onset) onsetSec += c.ms * 0.001 * cs;
+                for (auto& c : coda)  codaSec += c.ms * 0.001 * cs;
 
                 const double maxCons = 0.5 * (voicedEnd - t0);
                 const double k = (onsetSec + codaSec) > maxCons ? maxCons / (onsetSec + codaSec) : 1.0;
@@ -248,7 +265,7 @@ private:
                 };
 
                 for (auto& c : onset)
-                    emit (c, c.ms * 0.001 * k, vf);
+                    emit (c, c.ms * 0.001 * k * cs, vf);
 
                 const double vowelEnd = voicedEnd - codaSec * k;
 
@@ -260,7 +277,7 @@ private:
                 v.breath = breathAmount;
                 v.pitch = noteMidi;
                 v.tauUp = attackSec / 2.5f;
-                v.tauDown = 0.03f;
+                v.tauDown = 0.03f + 0.05f * juce::jlimit (0.0f, 1.0f, req.legato);
                 v.tauFormant = 0.016f;
                 v.newNote = first;
                 v.scoop = scoop;
@@ -269,7 +286,7 @@ private:
                 cur = v.t1;
 
                 for (auto& c : coda)
-                    emit (c, c.ms * 0.001 * k, vf);
+                    emit (c, c.ms * 0.001 * k * cs, vf);
 
                 // Release tail so the next syllable (or silence) is entered smoothly.
                 if (cur < voicedEnd - 1.0e-4)
@@ -584,6 +601,47 @@ private:
             }
 
             return true;
+        }
+
+        // Body: a low shelf for chest warmth, then a soft saturation (scaled to the clip peak) that thickens the harmonics.
+        static void addBody (GeneratedClip& clip, float amount)
+        {
+            if (amount <= 0.001f)
+                return;
+
+            const double sr = clip.sampleRate;
+            const double A = std::pow (10.0, (5.0 * amount) / 40.0);
+            const double w0 = juce::MathConstants<double>::twoPi * 230.0 / sr;
+            const double cw = std::cos (w0), alpha = std::sin (w0) / 2.0 * std::sqrt (2.0);
+            const double sq = 2.0 * std::sqrt (A) * alpha;
+
+            const double b0 = A * ((A + 1) - (A - 1) * cw + sq), b1 = 2 * A * ((A - 1) - (A + 1) * cw),
+                         b2 = A * ((A + 1) - (A - 1) * cw - sq),
+                         a0 = (A + 1) + (A - 1) * cw + sq, a1 = -2 * ((A - 1) + (A + 1) * cw), a2 = (A + 1) + (A - 1) * cw - sq;
+
+            float peak = 1.0e-6f;
+
+            for (auto* ch : { &clip.left, &clip.right })
+            {
+                double z1 = 0.0, z2 = 0.0;
+
+                for (auto& x : *ch)
+                {
+                    const double in = x;
+                    const double y = (b0 / a0) * in + z1;
+                    z1 = (b1 / a0) * in - (a1 / a0) * y + z2;
+                    z2 = (b2 / a0) * in - (a2 / a0) * y;
+                    x = static_cast<float> (y);
+                    peak = juce::jmax (peak, std::abs (x));
+                }
+            }
+
+            const float drive = 1.0f + 1.4f * amount;
+            const float norm = 1.0f / std::tanh (drive);
+
+            for (auto* ch : { &clip.left, &clip.right })
+                for (auto& x : *ch)
+                    x = std::tanh (drive * x / peak) * norm * peak;
         }
 
         static void normalise (GeneratedClip& clip)

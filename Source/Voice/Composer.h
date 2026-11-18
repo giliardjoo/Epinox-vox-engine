@@ -30,7 +30,7 @@ public:
     static constexpr double maxLoopBeats = 32.0;
 
     static Composition compose (std::vector<Syllable> syllables, int genre, int style, int emotion, int voiceType,
-                                juce::int64 seed, int key = 9, int scaleChoice = 0)
+                                juce::int64 seed, int key = 9, int scaleChoice = 0, float legatoAmt = 0.0f)
     {
         juce::Random rng (seed);
         const auto G = genreProfile (genre);
@@ -67,7 +67,7 @@ public:
             const double d = pickDuration (S, rng);
             double rest = 0.0;
 
-            if (i > 0 && rng.nextFloat() < S.restChance)
+            if (i > 0 && rng.nextFloat() < S.restChance * (1.0f - 0.7f * legatoAmt))
                 rest = d;
 
             slots.push_back ({ rest, d, passBeats + rest });
