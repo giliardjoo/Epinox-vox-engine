@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 #include "FactoryPresets.h"
 #include "UI/Widgets.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 
 #if EPINOX_HAS_LOGO
  #include "BinaryData.h"

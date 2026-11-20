@@ -736,10 +736,10 @@ void testVoiceGenerator()
             double mean = 0.0, var = 0.0;
 
             for (auto v : active) mean += v;
-            mean /= static_cast<double> (juce::jmax<size_t> (1, active.size()));
+            mean /= static_cast<double> (active.empty() ? 1 : active.size());
 
             for (auto v : active) var += (v - mean) * (v - mean);
-            return std::sqrt (var / static_cast<double> (juce::jmax<size_t> (1, active.size())));
+            return std::sqrt (var / static_cast<double> (active.empty() ? 1 : active.size()));
         };
 
         auto highShare = [] (const std::vector<float>& x)
