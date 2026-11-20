@@ -310,6 +310,7 @@ bool VoxProcessor::requestGeneration (epinox::GenerationRequest request)
             s.setProperty (genAir, request.air, nullptr);
             s.setProperty (genMelody, request.melodyVariation, nullptr);
             lastMelodyVariation = request.melodyVariation >= 0 ? request.melodyVariation : static_cast<int> (request.variation);
+            lastVariation = request.variation;
             s.setProperty (genVariation, static_cast<int> (request.variation), nullptr);
         }
 
@@ -338,6 +339,7 @@ void VoxProcessor::rebuildGeneratedVocal (bool clearIfNone)
     const auto r = requestFromState (s, currentSampleRate);
     const auto key = keyFor (r);
     lastMelodyVariation = r.melodyVariation >= 0 ? r.melodyVariation : static_cast<int> (r.variation);
+    lastVariation = r.variation;
 
     if (ownedClip != nullptr && ownedClipKey == key && std::abs (ownedClip->sampleRate - currentSampleRate) < 0.5)
         return;

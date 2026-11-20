@@ -103,6 +103,13 @@ Producer tools (v0.9):
 - **EXPORT WAV**: saves the generated loop as a 24 bit stereo WAV. **DRAG TO TRACK**: drag the vocal as a WAV file onto a track in the host
   (it depends on the host accepting file drops from a plugin window; EXPORT WAV is the fallback).
 
+Automatic regeneration (v0.9.2): moving Genre, Voice Type, Emotion, Style, Key, Scale, Octave, Legato, Body, Layers, Polish, Air or
+BPM regenerates the vocal about 0.2 s after you stop, keeping the same take (same variation and melody). GENERATE and presets make a new
+take. Pitch and Formant act live and never need it. More human timing: each note lands up to 4 ms early or late, and the tone gets
+slightly purer on high notes and fuller on low ones.
+
+Quality gate: every push runs pluginval at strictness 5 on the VST3 (Windows and macOS) and fails the build if it reports a problem.
+
 Details worth knowing:
 
 - Pressing GENERATE again gives a new variation of the same phrase. The same phrase and settings always give the same audio.

@@ -53,6 +53,9 @@ public:
     // Melody seed of the last generated vocal, or -1 when there is none: Lock Melody keeps it.
     int getLastMelodyVariation() const { return lastMelodyVariation; }
 
+    // Variation of the last generated vocal (0 when none): changing a control regenerates the same take.
+    juce::uint32 getLastVariation() const { return lastVariation; }
+
     // The generated vocal as it is loaded now (message thread), or null. Used to export and drag it out.
     std::shared_ptr<const epinox::GeneratedClip> getCurrentClip() const { return ownedClip; }
 
@@ -103,6 +106,7 @@ private:
 
     juce::uint32 variationCounter = 0;
     int lastMelodyVariation = -1;
+    juce::uint32 lastVariation = 0;
     juce::String generationStatus;
     bool generationWarning = false;
     int generationStatusVersion = 0;

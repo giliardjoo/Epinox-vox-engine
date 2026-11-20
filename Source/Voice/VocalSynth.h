@@ -147,7 +147,8 @@ private:
                 const auto& note = comp.notes[n];
                 const auto& syl = comp.syllables[static_cast<size_t> (note.syllable)];
 
-                const double t0 = note.beat * spb;
+                // A human singer is never exactly on the grid: up to 4 ms early or late.
+                const double t0 = std::max (0.0, note.beat * spb + (flat ? 0.0 : (rng.nextFloat() - 0.5f) * 0.008));
                 const double dur = note.beats * spb;
                 const double voicedEnd = t0 + dur * (legato >= 0.97f ? 1.0 : legato);
                 auto vf = scaled (vowelFormants (syl.vowel));
@@ -505,7 +506,9 @@ private:
 
                     // Louder singing is brighter, soft onsets are darker.
                     const float level = juce::jlimit (0.5f, 1.4f, voiceA);
-                    const float bright = brightness * (0.8f + 0.2f * level);
+                    // Register: higher notes are purer and slightly darker, lower notes carry more harmonics.
+                    const float reg = juce::jlimit (-1.0f, 1.0f, (pitchS - V.centreMidi) / 12.0f);
+                    const float bright = brightness * (0.8f + 0.2f * level) * (1.0f - 0.12f * reg * human);
 
                     st.h = computeAmps (f0, f1Eff, fCur.f2, fCur.f3, targetRms * voiceA * (1.0f + 0.04f * shimmer * human),
                                         bright, singer, st.next, phaseTmp);

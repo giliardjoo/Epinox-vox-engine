@@ -92,7 +92,7 @@ namespace
 
 //==============================================================================
 // All controls live in this 1100 x 812 design space; the editor scales it to the window.
-class VoxContent : public juce::Component, private juce::Timer
+class VoxContent : public juce::Component, private juce::Timer, private juce::AudioProcessorValueTreeState::Listener
 {
 public:
     explicit VoxContent (VoxProcessor& p)
@@ -167,7 +167,7 @@ public:
 
         generateButton.setComponentID ("generate");
         generateButton.setButtonText ("GENERATE");
-        generateButton.onClick = [this] { pendingGenerate = false; onGenerate(); };
+        generateButton.onClick = [this] { pendingGenerate = false; autoDirty.store (false); onGenerate(); };
         phrase.onReturnKey = [this] { pendingGenerate = false; onGenerate(); };   // Enter in the phrase field also generates
 
         prevButton.setButtonText ("<");
@@ -201,7 +201,17 @@ public:
                  &presetLabel, &statusLabel })
             addAndMakeVisible (c);
 
+        // Any control that shapes the generated vocal regenerates it by itself, a moment after you stop moving it.
+        for (auto* id : autoIds)
+            apvts.addParameterListener (id, this);
+
         startTimerHz (30);
+    }
+
+    ~VoxContent() override
+    {
+        for (auto* id : autoIds)
+            apvts.removeParameterListener (id, this);
     }
 
     void paint (juce::Graphics& g) override
@@ -321,8 +331,26 @@ public:
     }
 
 private:
+    // Called for every change of a generator control (from the UI, a preset or host automation, so it only sets flags).
+    void parameterChanged (const juce::String&, float) override
+    {
+        if (ignoreChanges.load())
+            return;
+
+        lastChangeMs.store (juce::Time::getMillisecondCounter());
+        autoDirty.store (true);
+    }
+
     void timerCallback() override
     {
+        if (autoDirty.load() && juce::Time::getMillisecondCounter() - lastChangeMs.load() > 220 && ! proc.isGenerating())
+        {
+            autoDirty.store (false);
+
+            if (phrase.getText().trim().isNotEmpty())
+                onGenerate (true);
+        }
+
         meterIn.setLevels  (proc.inPeak.load(),  proc.inRms.load());
         meterOut.setLevels (proc.outPeak.load(), proc.outRms.load());
 
@@ -397,6 +425,7 @@ private:
 
     void afterPresetLoad()
     {
+        autoDirty.store (false);   // the preset generates its own vocal below
         phrase.setText (apvts.state.getProperty ("phrase").toString(), false);
         presetLabel.setText (proc.presets.getCurrentName(), juce::dontSendNotification);
         setStatus ({}, false);
@@ -409,7 +438,7 @@ private:
             onGenerate();
     }
 
-    void onGenerate()
+    void onGenerate (bool automatic = false)
     {
         const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id)->load(); };
 
@@ -438,24 +467,29 @@ private:
         // When the host reports a tempo, the vocal is generated at that tempo and the BPM knob follows it.
         const double hostBpm = proc.getHostBpm();
 
-        if (hostBpm >= 40.0 && hostBpm <= 220.0)
+        if (! automatic && hostBpm >= 40.0 && hostBpm <= 220.0)
         {
             request.bpm = hostBpm;
 
             if (auto* bpmParam = apvts.getParameter (pid::bpm))
+            {
+                ignoreChanges.store (true);
                 bpmParam->setValueNotifyingHost (bpmParam->convertTo0to1 (static_cast<float> (hostBpm)));
+                ignoreChanges.store (false);
+            }
         }
 
-        request.variation = proc.nextVariation();
+        // A tweak regenerates the same take (same variation); GENERATE and presets make a new one.
+        request.variation = automatic ? proc.getLastVariation() : proc.nextVariation();
 
         // Lock Melody: keep the melody of the last vocal, vary only the voice details.
-        const bool lock = get (pid::lockMelody) > 0.5f && proc.getLastMelodyVariation() >= 0;
+        const bool lock = (automatic || get (pid::lockMelody) > 0.5f) && proc.getLastMelodyVariation() >= 0;
         request.melodyVariation = lock ? proc.getLastMelodyVariation() : static_cast<int> (request.variation);
 
         if (proc.requestGeneration (request))
         {
             lastStatusVersion = proc.getGenerationStatusVersion();
-            setStatus ("Generating vocal...", false);
+            setStatus (automatic ? "Updating vocal..." : "Generating vocal...", false);
         }
         else
         {
@@ -567,6 +601,10 @@ private:
     juce::Image logo;
 
     bool pendingGenerate = false;
+    std::atomic<bool> autoDirty { false }, ignoreChanges { false };
+    std::atomic<juce::uint32> lastChangeMs { 0 };
+    static constexpr const char* autoIds[] = { pid::genre, pid::voiceType, pid::emotion, pid::style, pid::key, pid::scale, pid::octave,
+                                                pid::legato, pid::body, pid::layers, pid::polish, pid::air, pid::bpm };
     GenreList genreList;
     juce::TextEditor phrase;
     juce::TextButton generateButton, prevButton, nextButton, saveButton, openButton;
