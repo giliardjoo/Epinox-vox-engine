@@ -8,14 +8,17 @@ namespace
     const juce::Identifier genValid ("gen_valid"), genPhrase ("gen_phrase"), genGenre ("gen_genre"),
         genVoice ("gen_voice"), genEmotion ("gen_emotion"), genStyle ("gen_style"), genBpm ("gen_bpm"),
         genVariation ("gen_variation"), genKey ("gen_key"), genScale ("gen_scale"),
-        genLegato ("gen_legato"), genBody ("gen_body"), genLayers ("gen_layers");
+        genLegato ("gen_legato"), genBody ("gen_body"), genLayers ("gen_layers"),
+        genOctave ("gen_octave"), genPolish ("gen_polish"), genAir ("gen_air"), genMelody ("gen_melody");
 
     juce::String keyFor (const epinox::GenerationRequest& r)
     {
         return r.phrase + "|" + juce::String (r.genre) + "|" + juce::String (r.voiceType) + "|" + juce::String (r.emotion)
                + "|" + juce::String (r.style) + "|" + juce::String (r.bpm, 3) + "|" + juce::String (static_cast<int> (r.variation))
                + "|" + juce::String (r.key) + "|" + juce::String (r.scale)
-               + "|" + juce::String (r.legato, 3) + "|" + juce::String (r.body, 3) + "|" + juce::String (r.layers, 3);
+               + "|" + juce::String (r.legato, 3) + "|" + juce::String (r.body, 3) + "|" + juce::String (r.layers, 3)
+               + "|" + juce::String (r.octave) + "|" + juce::String (r.polish, 3) + "|" + juce::String (r.air, 3)
+               + "|" + juce::String (r.melodyVariation);
     }
 
     epinox::GenerationRequest requestFromState (const juce::ValueTree& s, double sampleRate)
@@ -32,6 +35,10 @@ namespace
         r.legato = s.getProperty (genLegato, 0.0);
         r.body = s.getProperty (genBody, 0.0);
         r.layers = s.getProperty (genLayers, 0.0);
+        r.octave = s.getProperty (genOctave, 0);
+        r.polish = s.getProperty (genPolish, 0.0);
+        r.air = s.getProperty (genAir, 0.0);
+        r.melodyVariation = s.getProperty (genMelody, -1);
         r.variation = static_cast<juce::uint32> (static_cast<int> (s.getProperty (genVariation, 0)));
         r.sampleRate = sampleRate;
         return r;
@@ -298,6 +305,11 @@ bool VoxProcessor::requestGeneration (epinox::GenerationRequest request)
             s.setProperty (genLegato, request.legato, nullptr);
             s.setProperty (genBody, request.body, nullptr);
             s.setProperty (genLayers, request.layers, nullptr);
+            s.setProperty (genOctave, request.octave, nullptr);
+            s.setProperty (genPolish, request.polish, nullptr);
+            s.setProperty (genAir, request.air, nullptr);
+            s.setProperty (genMelody, request.melodyVariation, nullptr);
+            lastMelodyVariation = request.melodyVariation >= 0 ? request.melodyVariation : static_cast<int> (request.variation);
             s.setProperty (genVariation, static_cast<int> (request.variation), nullptr);
         }
 
@@ -325,6 +337,7 @@ void VoxProcessor::rebuildGeneratedVocal (bool clearIfNone)
 
     const auto r = requestFromState (s, currentSampleRate);
     const auto key = keyFor (r);
+    lastMelodyVariation = r.melodyVariation >= 0 ? r.melodyVariation : static_cast<int> (r.variation);
 
     if (ownedClip != nullptr && ownedClipKey == key && std::abs (ownedClip->sampleRate - currentSampleRate) < 0.5)
         return;

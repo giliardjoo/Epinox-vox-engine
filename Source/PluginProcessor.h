@@ -50,6 +50,12 @@ public:
     bool isGenerating() const { return generation.isBusy(); }
     juce::uint32 nextVariation() { return variationCounter++; }
 
+    // Melody seed of the last generated vocal, or -1 when there is none: Lock Melody keeps it.
+    int getLastMelodyVariation() const { return lastMelodyVariation; }
+
+    // The generated vocal as it is loaded now (message thread), or null. Used to export and drag it out.
+    std::shared_ptr<const epinox::GeneratedClip> getCurrentClip() const { return ownedClip; }
+
     // Last message about generation, and a counter that changes whenever it does.
     juce::String getGenerationStatus() const { return generationStatus; }
     bool generationStatusIsWarning() const { return generationWarning; }
@@ -96,6 +102,7 @@ private:
     std::atomic<double> hostBpm { 0.0 };
 
     juce::uint32 variationCounter = 0;
+    int lastMelodyVariation = -1;
     juce::String generationStatus;
     bool generationWarning = false;
     int generationStatusVersion = 0;

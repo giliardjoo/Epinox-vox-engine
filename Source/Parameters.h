@@ -17,6 +17,10 @@ namespace pid
     inline constexpr const char* pitch     = "pitch";
     inline constexpr const char* formant   = "formant";
     inline constexpr const char* bpm       = "bpm";
+    inline constexpr const char* octave    = "octave";
+    inline constexpr const char* polish    = "polish";
+    inline constexpr const char* air       = "air";
+    inline constexpr const char* lockMelody = "lockMelody";
     inline constexpr const char* legato    = "legato";
     inline constexpr const char* body      = "body";
     inline constexpr const char* layers    = "layers";
@@ -128,6 +132,10 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     addFloat (pid::pitch,   "Pitch",   -24.0f, 24.0f, 0.0f, "st");
     addFloat (pid::formant, "Formant", -12.0f, 12.0f, 0.0f, "st");
     addFloat (pid::bpm,     "BPM",      40.0f, 220.0f, 128.0f, "bpm");
+    layout.add (std::make_unique<API> (id (pid::octave), "Octave", -2, 2, 0));
+    addPct   (pid::polish, "Polish", 50.0f);
+    addPct   (pid::air,    "Air",    30.0f);
+    addToggle (pid::lockMelody, "Lock Melody", false);
     addPct   (pid::legato, "Legato", 60.0f);
     addPct   (pid::body,   "Body",   60.0f);
     addPct   (pid::layers, "Layers", 40.0f);

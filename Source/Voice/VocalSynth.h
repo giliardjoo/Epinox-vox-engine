@@ -117,6 +117,7 @@ private:
                 return nullptr;
 
             addBody (*clip, juce::jlimit (0.0f, 1.0f, req.body));
+            polishClip (*clip, juce::jlimit (0.0f, 1.0f, req.polish), juce::jlimit (0.0f, 1.0f, req.air));
 
             normalise (*clip);
 
@@ -642,6 +643,163 @@ private:
             for (auto* ch : { &clip.left, &clip.right })
                 for (auto& x : *ch)
                     x = std::tanh (drive * x / peak) * norm * peak;
+        }
+
+        // Finishing chain: a linked compressor evens the level, a de-esser tames sibilance, an air shelf opens the top.
+        static void polishClip (GeneratedClip& clip, float polish, float air)
+        {
+            const size_t n = clip.left.size();
+            const double sr = clip.sampleRate;
+
+            if (n == 0)
+                return;
+
+            struct Bq
+            {
+                double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
+
+                double process (double x)
+                {
+                    const double y = b0 * x + z1;
+                    z1 = b1 * x - a1 * y + z2;
+                    z2 = b2 * x - a2 * y;
+                    return y;
+                }
+            };
+
+            auto highpass = [&] (double fc)
+            {
+                const double w0 = juce::MathConstants<double>::twoPi * fc / sr, cw = std::cos (w0);
+                const double alpha = std::sin (w0) / (2.0 * 0.7071);
+                const double a0 = 1.0 + alpha;
+                Bq q;
+                q.b0 = ((1.0 + cw) / 2.0) / a0;
+                q.b1 = -(1.0 + cw) / a0;
+                q.b2 = q.b0;
+                q.a1 = -2.0 * cw / a0;
+                q.a2 = (1.0 - alpha) / a0;
+                return q;
+            };
+
+            auto highShelf = [&] (double fc, double gainDb)
+            {
+                const double A = std::pow (10.0, gainDb / 40.0);
+                const double w0 = juce::MathConstants<double>::twoPi * fc / sr, cw = std::cos (w0);
+                const double alpha = std::sin (w0) / 2.0 * std::sqrt (2.0);
+                const double sq = 2.0 * std::sqrt (A) * alpha;
+                const double a0 = (A + 1) - (A - 1) * cw + sq;
+                Bq q;
+                q.b0 = A * ((A + 1) + (A - 1) * cw + sq) / a0;
+                q.b1 = -2.0 * A * ((A - 1) + (A + 1) * cw) / a0;
+                q.b2 = A * ((A + 1) + (A - 1) * cw - sq) / a0;
+                q.a1 = 2.0 * ((A - 1) - (A + 1) * cw) / a0;
+                q.a2 = ((A + 1) - (A - 1) * cw - sq) / a0;
+                return q;
+            };
+
+            double rmsBefore = 0.0;
+
+            for (size_t i = 0; i < n; ++i)
+                rmsBefore += 0.5 * (static_cast<double> (clip.left[i]) * clip.left[i] + static_cast<double> (clip.right[i]) * clip.right[i]);
+
+            rmsBefore = std::sqrt (rmsBefore / static_cast<double> (n));
+
+            if (rmsBefore < 1.0e-6)
+                return;
+
+            if (polish > 0.001f)
+            {
+                // De-esser: the 5 kHz and up band is turned down when it gets loud compared with the whole signal.
+                Bq hpL = highpass (5200.0), hpR = hpL;
+                double bandEnv = 0.0;
+                const double bandAtt = 1.0 - std::exp (-1.0 / (0.001 * sr)), bandRel = 1.0 - std::exp (-1.0 / (0.040 * sr));
+
+                // Compressor: threshold just above the average level, ratio grows with the amount.
+                const double ratio = 1.0 + 3.0 * polish;
+                double env = 0.0, grDb = 0.0;
+                const double att = 1.0 - std::exp (-1.0 / (0.002 * sr)), rel = 1.0 - std::exp (-1.0 / (0.150 * sr));
+                const size_t look = static_cast<size_t> (0.004 * sr);   // the detector looks ahead, so peaks are caught
+
+                // Threshold = the average level of the sung parts (silence ignored), so only the louder parts are pulled down.
+                double thrDb = 0.0;
+                {
+                    double e2 = 0.0, sumDb = 0.0, maxEnv = 1.0e-6;
+                    std::vector<float> envs (n);
+
+                    for (size_t i = 0; i < n; ++i)
+                    {
+                        const size_t j = std::min (n - 1, i + look);
+                        const double w = std::max (std::abs (static_cast<double> (clip.left[j])), std::abs (static_cast<double> (clip.right[j])));
+                        e2 += (w > e2 ? att : rel) * (w - e2);
+                        envs[i] = static_cast<float> (e2);
+                        maxEnv = std::max (maxEnv, e2);
+                    }
+
+                    size_t cnt = 0;
+
+                    for (size_t i = 0; i < n; ++i)
+                        if (envs[i] > 0.1 * maxEnv)
+                        {
+                            sumDb += 20.0 * std::log10 (static_cast<double> (envs[i]));
+                            ++cnt;
+                        }
+
+                    thrDb = cnt > 0 ? sumDb / static_cast<double> (cnt) : -20.0;
+                }
+
+                for (size_t i = 0; i < n; ++i)
+                {
+                    double l = clip.left[i], r = clip.right[i];
+
+                    const double bl = hpL.process (l), br = hpR.process (r);
+                    const double band = std::max (std::abs (bl), std::abs (br));
+                    bandEnv += (band > bandEnv ? bandAtt : bandRel) * (band - bandEnv);
+
+                    const size_t j = std::min (n - 1, i + look);
+                    const double whole = std::max (std::abs (static_cast<double> (clip.left[j])), std::abs (static_cast<double> (clip.right[j])));
+                    const double ratioHf = bandEnv / std::max (1.0e-5, env + 1.0e-5);   // band against the whole
+                    const double over = std::max (0.0, ratioHf - 0.35);
+                    const double cut = std::min (0.75, over * 1.4) * polish;   // up to 75 % of the band removed
+
+                    l -= bl * cut;
+                    r -= br * cut;
+
+                    env += (whole > env ? att : rel) * (whole - env);
+                    const double envDb = 20.0 * std::log10 (std::max (env, 1.0e-6));
+                    const double targetGr = envDb > thrDb ? (envDb - thrDb) * (1.0 - 1.0 / ratio) : 0.0;
+                    grDb += (targetGr > grDb ? att : rel) * (targetGr - grDb);
+                    const double g = std::pow (10.0, -grDb / 20.0);
+
+                    clip.left[i] = static_cast<float> (l * g);
+                    clip.right[i] = static_cast<float> (r * g);
+                }
+
+                // Make-up gain: back to the original average level.
+                double rmsAfter = 0.0;
+
+                for (size_t i = 0; i < n; ++i)
+                    rmsAfter += 0.5 * (static_cast<double> (clip.left[i]) * clip.left[i] + static_cast<double> (clip.right[i]) * clip.right[i]);
+
+                rmsAfter = std::sqrt (rmsAfter / static_cast<double> (n));
+                const float makeup = static_cast<float> (rmsBefore / std::max (1.0e-9, rmsAfter));
+
+                for (size_t i = 0; i < n; ++i)
+                {
+                    clip.left[i] *= makeup;
+                    clip.right[i] *= makeup;
+                }
+            }
+
+            if (air > 0.001f)
+            {
+                auto shelfL = highShelf (5500.0, 5.0 * air), shelfR = shelfL;
+
+                for (size_t i = 0; i < n; ++i)
+                {
+                    clip.left[i] = static_cast<float> (shelfL.process (clip.left[i]));
+                    clip.right[i] = static_cast<float> (shelfR.process (clip.right[i]));
+                }
+            }
         }
 
         static void normalise (GeneratedClip& clip)

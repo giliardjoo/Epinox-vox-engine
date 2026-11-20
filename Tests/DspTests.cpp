@@ -697,6 +697,107 @@ void testVoiceGenerator()
     }
 
     {
+        // Polish and Air: a more even level, calmer sibilance, a brighter top.
+        auto render = [&] (float polish, float air)
+        {
+            epinox::GenerationRequest q;
+            q.phrase = "she sells sea shells at the seashore";
+            q.sampleRate = sr;
+            q.style = 5;
+            q.polish = polish;
+            q.air = air;
+            return epinox::voice::renderPhrase (q);
+        };
+
+        // Level evenness: standard deviation (dB) of the short-term level over the sung parts.
+        auto levelSpread = [] (const std::vector<float>& x)
+        {
+            const size_t win = 2205;
+            std::vector<double> db;
+            double peakLevel = 0.0;
+
+            for (size_t i = 0; i + win < x.size(); i += win)
+            {
+                double e = 0.0;
+
+                for (size_t j = 0; j < win; ++j)
+                    e += static_cast<double> (x[i + j]) * x[i + j];
+
+                db.push_back (std::sqrt (e / static_cast<double> (win)));
+                peakLevel = std::max (peakLevel, db.back());
+            }
+
+            std::vector<double> active;
+
+            for (auto v : db)
+                if (v > 0.25 * peakLevel)
+                    active.push_back (20.0 * std::log10 (v));
+
+            double mean = 0.0, var = 0.0;
+
+            for (auto v : active) mean += v;
+            mean /= static_cast<double> (juce::jmax<size_t> (1, active.size()));
+
+            for (auto v : active) var += (v - mean) * (v - mean);
+            return std::sqrt (var / static_cast<double> (juce::jmax<size_t> (1, active.size())));
+        };
+
+        auto highShare = [] (const std::vector<float>& x)
+        {
+            double lp = 0.0, eHigh = 0.0, eAll = 0.0;
+            const double a = 1.0 - std::exp (-2.0 * juce::MathConstants<double>::pi * 5000.0 / 44100.0);
+
+            for (auto v : x)
+            {
+                lp += a * (static_cast<double> (v) - lp);
+                const double hp = static_cast<double> (v) - lp;
+                eHigh += hp * hp;
+                eAll += static_cast<double> (v) * v;
+            }
+
+            return eHigh / juce::jmax (1.0e-9, eAll);
+        };
+
+        const auto raw = render (0.0f, 0.0f);
+        const auto pol = render (1.0f, 0.0f);
+        const auto bright = render (0.0f, 1.0f);
+        check (raw && pol && bright && levelSpread (pol->left) < levelSpread (raw->left) * 0.95,
+               fmt ("polish evens the level: spread %.2f dB -> %.2f dB", levelSpread (raw->left), levelSpread (pol->left)));
+        check (highShare (pol->left) < highShare (raw->left),
+               fmt ("polish calms the sibilance: share above 5 kHz %.4f -> %.4f", highShare (raw->left), highShare (pol->left)));
+        check (highShare (bright->left) > highShare (raw->left) * 1.1,
+               fmt ("air opens the top: share above 5 kHz %.4f -> %.4f", highShare (raw->left), highShare (bright->left)));
+
+        // Octave and a locked melody seed.
+        epinox::GenerationRequest q;
+        q.phrase = "hold on";
+        q.sampleRate = sr;
+        q.style = 5;
+        const auto base = epinox::voice::renderPhrase (q);
+        q.octave = 1;
+        const auto up = epinox::voice::renderPhrase (q);
+        check (base && up && base->left.size() == up->left.size(), "octave keeps the loop length");
+
+        using namespace epinox::voice;
+        const auto c0 = Composer::compose (PhraseParser::parse ("hold on"), 0, 5, 0, 0, 777, 9, 0, 0.0f, 0);
+        const auto c1 = Composer::compose (PhraseParser::parse ("hold on"), 0, 5, 0, 0, 777, 9, 0, 0.0f, 1);
+        check (! c0.notes.empty() && c0.notes.size() == c1.notes.size()
+                   && std::abs ((c1.notes.front().midi - c0.notes.front().midi) - 12.0f) < 0.01f,
+               "octave +1 raises every note by 12 semitones");
+
+        q.octave = 0;
+        q.variation = 1;
+        const auto v1 = epinox::voice::renderPhrase (q);
+        q.variation = 2;
+        const auto v2 = epinox::voice::renderPhrase (q);
+        q.melodyVariation = 1;
+        const auto locked = epinox::voice::renderPhrase (q);
+        check (v1->left != v2->left, "a new variation changes the vocal");
+        check (locked->left != v1->left && locked->description == v1->description,
+               "with the melody locked, only the voice details change");
+    }
+
+    {
         // Key and scale: every composed note belongs to the chosen scale, in every key, and the melody ends on the tonic.
         using namespace epinox::voice;
         bool allIn = true, endsOnTonic = true;

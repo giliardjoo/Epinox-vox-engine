@@ -11,6 +11,9 @@ struct GenerationRequest
     juce::String phrase;
     int genre = 0, voiceType = 0, emotion = 0, style = 0;
     float legato = 0.0f, body = 0.0f, layers = 0.0f;   // 0..1: connected notes, low-mid warmth, doubled voices
+    float polish = 0.0f, air = 0.0f;                   // 0..1: compression + de-essing, high-frequency shelf
+    int octave = 0;                  // -2..+2 octaves
+    int melodyVariation = -1;        // -1: same as variation; otherwise the melody seed (Lock Melody)
     int key = 9;                     // 0 = C ... 11 = B (default A)
     int scale = 0;                   // 0 = follow the genre, 1.. = forced scale (see scaleNames)
     double bpm = 128.0;

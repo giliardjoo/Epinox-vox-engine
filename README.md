@@ -95,6 +95,14 @@ Body controls (v0.8), next to Pitch, Formant and BPM, applied at GENERATE time:
 
 The Vocal Chop module is now off by default, because its gate cuts the vocal into pieces; factory presets that use it switch it on.
 
+Producer tools (v0.9):
+
+- **Polish** (default 50 %): finishing chain on the generated vocal: a look-ahead compressor evens the level and a de-esser calms sibilance.
+- **Air** (default 30 %): high shelf around 5.5 kHz that opens the top.
+- **Octave** (-2 to +2): shifts the whole melody by octaves. **Lock Melody**: GENERATE keeps the melody and only changes the voice details.
+- **EXPORT WAV**: saves the generated loop as a 24 bit stereo WAV. **DRAG TO TRACK**: drag the vocal as a WAV file onto a track in the host
+  (it depends on the host accepting file drops from a plugin window; EXPORT WAV is the fallback).
+
 Details worth knowing:
 
 - Pressing GENERATE again gives a new variation of the same phrase. The same phrase and settings always give the same audio.

@@ -30,7 +30,7 @@ public:
     static constexpr double maxLoopBeats = 32.0;
 
     static Composition compose (std::vector<Syllable> syllables, int genre, int style, int emotion, int voiceType,
-                                juce::int64 seed, int key = 9, int scaleChoice = 0, float legatoAmt = 0.0f)
+                                juce::int64 seed, int key = 9, int scaleChoice = 0, float legatoAmt = 0.0f, int octave = 0)
     {
         juce::Random rng (seed);
         const auto G = genreProfile (genre);
@@ -48,7 +48,8 @@ public:
 
         // Scale root: the chosen key closest to six semitones below the voice centre, so the melody sits around the centre.
         const int keyPc = juce::jlimit (0, 11, key);
-        const int base = keyPc + 12 * static_cast<int> (std::lround ((V.centreMidi - 6.0f - static_cast<float> (keyPc)) / 12.0f));
+        const int base = keyPc + 12 * (static_cast<int> (std::lround ((V.centreMidi - 6.0f - static_cast<float> (keyPc)) / 12.0f))
+                                       + juce::jlimit (-2, 2, octave));
 
         auto degreeToMidi = [&] (int idx)
         {

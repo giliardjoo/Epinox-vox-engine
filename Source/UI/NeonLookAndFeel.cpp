@@ -119,6 +119,23 @@ void NeonLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& b
         return;
     }
 
+    if (button.getComponentID() == "lock")
+    {
+        auto r = b.reduced (1.0f);
+        g.setColour (on ? neon.withAlpha (0.20f) : juce::Colour (0xff0a1210));
+        g.fillRoundedRectangle (r, 8.0f);
+
+        if (on)
+            glowRoundedRect (g, r, 8.0f, neon, 0.8f);
+
+        g.setColour (on ? neon : neonDim.withAlpha (highlighted ? 1.0f : 0.8f));
+        g.drawRoundedRectangle (r, 8.0f, 1.3f);
+        g.setColour (on ? neon : textDim);
+        g.setFont (juce::Font (juce::FontOptions (11.5f, juce::Font::bold)));
+        g.drawText (button.getButtonText(), r, juce::Justification::centred);
+        return;
+    }
+
     // Compact on/off switch used by the processing modules.
     auto sw = juce::Rectangle<float> (34.0f, 16.0f).withCentre (b.getCentre());
     g.setColour (on ? neon.withAlpha (0.22f) : juce::Colour (0xff0a1210));

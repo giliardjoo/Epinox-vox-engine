@@ -11,7 +11,86 @@ using namespace epinox::colours;
 using namespace epinox::ui;
 
 //==============================================================================
-// All controls live in this 1100 x 740 design space; the editor scales it to the window.
+namespace
+{
+    // Writes the generated loop as a 24 bit WAV file. Returns false when the file could not be written.
+    bool writeClipWav (const epinox::GeneratedClip& clip, const juce::File& file)
+    {
+        file.deleteFile();
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::FileOutputStream> out (file.createOutputStream());
+
+        if (out == nullptr)
+            return false;
+
+        std::unique_ptr<juce::AudioFormatWriter> writer (wav.createWriterFor (out.get(), clip.sampleRate, 2, 24, {}, 0));
+
+        if (writer == nullptr)
+            return false;
+
+        out.release();   // the writer owns the stream now
+
+        juce::AudioBuffer<float> buffer (2, clip.length());
+        buffer.copyFrom (0, 0, clip.left.data(), clip.length());
+        buffer.copyFrom (1, 0, clip.right.data(), clip.length());
+        return writer->writeFromAudioSampleBuffer (buffer, 0, clip.length());
+    }
+
+    juce::String clipFileName (const epinox::GeneratedClip& clip, const juce::String& phrase)
+    {
+        auto name = juce::File::createLegalFileName (phrase.trim().substring (0, 28));
+
+        if (name.isEmpty())
+            name = "Vocal";
+
+        return "EPINOX VOX - " + name + " - " + juce::String (juce::roundToInt (clip.bpm)) + " BPM.wav";
+    }
+
+    // A handle you drag onto a track in the DAW: it carries the generated vocal as a WAV file.
+    class DragHandle : public juce::Component
+    {
+    public:
+        std::function<juce::File()> prepareFile;
+
+        void paint (juce::Graphics& g) override
+        {
+            auto r = getLocalBounds().toFloat().reduced (1.0f);
+            g.setColour (juce::Colour (0xff0a1210));
+            g.fillRoundedRectangle (r, 8.0f);
+            g.setColour (neonDim.withAlpha (over ? 1.0f : 0.8f));
+            g.drawRoundedRectangle (r, 8.0f, 1.3f);
+            g.setColour (neon);
+            g.setFont (juce::Font (juce::FontOptions (11.5f, juce::Font::bold)));
+            g.drawText ("DRAG TO TRACK", r, juce::Justification::centred);
+        }
+
+        void mouseEnter (const juce::MouseEvent&) override { over = true; repaint(); }
+        void mouseExit (const juce::MouseEvent&) override  { over = false; repaint(); }
+
+        void mouseDrag (const juce::MouseEvent& e) override
+        {
+            if (dragging || e.getDistanceFromDragStart() < 6 || ! prepareFile)
+                return;
+
+            const auto f = prepareFile();
+
+            if (f == juce::File())
+                return;
+
+            dragging = true;
+            juce::DragAndDropContainer::performExternalDragDropOfFiles ({ f.getFullPathName() }, false, this,
+                                                                         [this] { dragging = false; });
+        }
+
+        void mouseUp (const juce::MouseEvent&) override { dragging = false; }
+
+    private:
+        bool over = false, dragging = false;
+    };
+}
+
+//==============================================================================
+// All controls live in this 1100 x 812 design space; the editor scales it to the window.
 class VoxContent : public juce::Component, private juce::Timer
 {
 public:
@@ -30,6 +109,9 @@ public:
           legatoKnob   (p.apvts, pid::legato,  "LEGATO",  " %",  0),
           bodyKnob     (p.apvts, pid::body,    "BODY",    " %",  0),
           layersKnob   (p.apvts, pid::layers,  "LAYERS",  " %",  0),
+          octaveKnob   (p.apvts, pid::octave,  "OCTAVE",  "",    0),
+          polishKnob   (p.apvts, pid::polish,  "POLISH",  " %",  0),
+          airKnob      (p.apvts, pid::air,     "AIR",     " %",  0),
           mixKnob      (p.apvts, pid::mix,     "MIX",     " %",  0, true),
           outKnob      (p.apvts, pid::outGain, "OUTPUT",  " dB", 1),
           waveform (p),
@@ -72,6 +154,16 @@ public:
         phrase.setText (apvts.state.getProperty ("phrase").toString(), false);
         phrase.onTextChange = [this] { apvts.state.setProperty ("phrase", phrase.getText(), nullptr); };
 
+        lockButton.setComponentID ("lock");
+        lockButton.setButtonText ("LOCK MELODY");
+        lockAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, pid::lockMelody, lockButton);
+        lockButton.setTooltip ("Keeps the same melody when you press GENERATE again; only the voice details change.");
+
+        exportButton.setButtonText ("EXPORT WAV");
+        exportButton.onClick = [this] { onExport(); };
+
+        dragHandle.prepareFile = [this] { return prepareDragFile(); };
+
         generateButton.setComponentID ("generate");
         generateButton.setButtonText ("GENERATE");
         generateButton.onClick = [this] { pendingGenerate = false; onGenerate(); };
@@ -101,7 +193,7 @@ public:
 
         for (auto* c : std::initializer_list<juce::Component*> {
                  &genreList, &phrase, &generateButton,
-                 &voiceCombo, &emotionCombo, &styleCombo, &keyCombo, &scaleCombo, &pitchKnob, &formantKnob, &bpmKnob, &legatoKnob, &bodyKnob, &layersKnob,
+                 &voiceCombo, &emotionCombo, &styleCombo, &keyCombo, &scaleCombo, &pitchKnob, &formantKnob, &bpmKnob, &legatoKnob, &bodyKnob, &layersKnob, &octaveKnob, &polishKnob, &airKnob, &lockButton, &exportButton, &dragHandle,
                  &mixKnob, &outKnob, &waveform, &meterIn, &meterOut,
                  &chopPanel, &transformPanel, &effectsPanel, &spatialPanel,
                  &prevButton, &nextButton, &saveButton, &openButton, &powerButton,
@@ -183,7 +275,7 @@ public:
         openButton.setBounds (858, 18, 62, 30);
         powerButton.setBounds (1040, 12, 42, 42);
 
-        genreList.setBounds (16, 80, 204, 392);
+        genreList.setBounds (16, 80, 204, 466);
 
         phrase.setBounds (236, 80, 490, 52);
         generateButton.setBounds (738, 80, 110, 52);
@@ -200,23 +292,31 @@ public:
                 row[i]->setBounds (236 + i * 102, 200, 102, 128);
         }
 
-        keyCombo.setBounds   (236, 332, 196, 46);
-        scaleCombo.setBounds (444, 332, 404, 46);
+        keyCombo.setBounds   (236, 334, 196, 46);
+        scaleCombo.setBounds (236, 386, 196, 46);
 
-        waveform.setBounds (236, 386, 612, 86);
+        octaveKnob.setBounds (444, 332, 102, 128);
+        polishKnob.setBounds (546, 332, 102, 128);
+        airKnob.setBounds    (648, 332, 102, 128);
+
+        lockButton.setBounds   (758, 336, 90, 36);
+        exportButton.setBounds (758, 380, 90, 36);
+        dragHandle.setBounds   (758, 424, 90, 36);
+
+        waveform.setBounds (236, 470, 612, 76);
 
         mixKnob.setBounds (864, 80, 220, 250);
-        meterIn.setBounds  (878, 342, 50, 130);
-        meterOut.setBounds (934, 342, 50, 130);
-        outKnob.setBounds  (994, 354, 90, 112);
+        meterIn.setBounds  (878, 342, 50, 204);
+        meterOut.setBounds (934, 342, 50, 204);
+        outKnob.setBounds  (994, 390, 90, 112);
 
         const int w = 258, gap = 12;
-        chopPanel.setBounds      (16 + 0 * (w + gap), 486, w, 228);
-        transformPanel.setBounds (16 + 1 * (w + gap), 486, w, 228);
-        effectsPanel.setBounds   (16 + 2 * (w + gap), 486, w, 228);
-        spatialPanel.setBounds   (16 + 3 * (w + gap), 486, w, 228);
+        chopPanel.setBounds      (16 + 0 * (w + gap), 560, w, 228);
+        transformPanel.setBounds (16 + 1 * (w + gap), 560, w, 228);
+        effectsPanel.setBounds   (16 + 2 * (w + gap), 560, w, 228);
+        spatialPanel.setBounds   (16 + 3 * (w + gap), 560, w, 228);
 
-        statusLabel.setBounds (16, 718, 640, 18);
+        statusLabel.setBounds (16, 790, 640, 18);
     }
 
 private:
@@ -330,6 +430,9 @@ private:
         request.legato    = get (pid::legato) / 100.0f;
         request.body      = get (pid::body) / 100.0f;
         request.layers    = get (pid::layers) / 100.0f;
+        request.octave    = static_cast<int> (get (pid::octave));
+        request.polish    = get (pid::polish) / 100.0f;
+        request.air       = get (pid::air) / 100.0f;
 
         // When the host reports a tempo, the vocal is generated at that tempo and the BPM knob follows it.
         const double hostBpm = proc.getHostBpm();
@@ -344,6 +447,10 @@ private:
 
         request.variation = proc.nextVariation();
 
+        // Lock Melody: keep the melody of the last vocal, vary only the voice details.
+        const bool lock = get (pid::lockMelody) > 0.5f && proc.getLastMelodyVariation() >= 0;
+        request.melodyVariation = lock ? proc.getLastMelodyVariation() : static_cast<int> (request.variation);
+
         if (proc.requestGeneration (request))
         {
             lastStatusVersion = proc.getGenerationStatusVersion();
@@ -353,6 +460,59 @@ private:
         {
             setStatus ("Still generating, one moment.", false);
         }
+    }
+
+    void onExport()
+    {
+        const auto clip = proc.getCurrentClip();
+
+        if (clip == nullptr)
+        {
+            setStatus ("Generate a vocal first, then export it.", true);
+            return;
+        }
+
+        chooser = std::make_unique<juce::FileChooser> ("Export the vocal as WAV",
+                                                       juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+                                                           .getChildFile (clipFileName (*clip, phrase.getText())),
+                                                       "*.wav");
+        chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                                  | juce::FileBrowserComponent::warnAboutOverwriting,
+                              [this, clip] (const juce::FileChooser& fc)
+                              {
+                                  const auto f = fc.getResult();
+
+                                  if (f == juce::File())
+                                      return;
+
+                                  setStatus (writeClipWav (*clip, f.withFileExtension ("wav")) ? "Exported: " + f.getFileName()
+                                                                                              : "Could not write the WAV file.",
+                                             false);
+                              });
+    }
+
+    // Writes the current vocal to a temporary WAV so it can be dragged onto a track.
+    juce::File prepareDragFile()
+    {
+        const auto clip = proc.getCurrentClip();
+
+        if (clip == nullptr)
+        {
+            setStatus ("Generate a vocal first, then drag it to a track.", true);
+            return {};
+        }
+
+        auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("EPINOX VOX ENGINE");
+        dir.createDirectory();
+        const auto file = dir.getChildFile (clipFileName (*clip, phrase.getText()));
+
+        if (! writeClipWav (*clip, file))
+        {
+            setStatus ("Could not prepare the file to drag.", true);
+            return {};
+        }
+
+        return file;
     }
 
     void onSave()
@@ -413,7 +573,11 @@ private:
     juce::Label presetLabel, statusLabel;
 
     NeonCombo voiceCombo, emotionCombo, styleCombo, keyCombo, scaleCombo;
-    NeonKnob pitchKnob, formantKnob, bpmKnob, legatoKnob, bodyKnob, layersKnob, mixKnob, outKnob;
+    NeonKnob pitchKnob, formantKnob, bpmKnob, legatoKnob, bodyKnob, layersKnob, octaveKnob, polishKnob, airKnob, mixKnob, outKnob;
+    juce::ToggleButton lockButton;
+    juce::TextButton exportButton;
+    DragHandle dragHandle;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> lockAttachment;
     WaveformView waveform;
     MeterBar meterIn, meterOut;
     ModulePanel chopPanel, transformPanel, effectsPanel, spatialPanel;
