@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "FactoryPresets.h"
+#include "VoiceEngines.h"
 #include "UI/Widgets.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 
@@ -193,13 +194,15 @@ public:
         lastStatusVersion = proc.getGenerationStatusVersion();
 
         for (auto* c : std::initializer_list<juce::Component*> {
-                 &genreList, &phrase, &generateButton,
+                 &genreList, &engineCombo, &phrase, &generateButton,
                  &voiceCombo, &emotionCombo, &styleCombo, &keyCombo, &scaleCombo, &pitchKnob, &formantKnob, &bpmKnob, &legatoKnob, &bodyKnob, &layersKnob, &octaveKnob, &polishKnob, &airKnob, &lockButton, &exportButton, &dragHandle,
                  &mixKnob, &outKnob, &waveform, &meterIn, &meterOut,
                  &chopPanel, &transformPanel, &effectsPanel, &spatialPanel,
                  &prevButton, &nextButton, &saveButton, &openButton, &powerButton,
                  &presetLabel, &statusLabel })
             addAndMakeVisible (c);
+
+        setupEngineCombo();
 
         // Any control that shapes the generated vocal regenerates it by itself, a moment after you stop moving it.
         for (auto* id : autoIds)
@@ -286,7 +289,8 @@ public:
         openButton.setBounds (858, 18, 62, 30);
         powerButton.setBounds (1040, 12, 42, 42);
 
-        genreList.setBounds (16, 80, 204, 466);
+        genreList.setBounds (16, 80, 204, 410);
+        engineCombo.setBounds (16, 500, 204, 46);
 
         phrase.setBounds (236, 80, 490, 52);
         generateButton.setBounds (738, 80, 110, 52);
@@ -463,6 +467,7 @@ private:
         request.octave    = static_cast<int> (get (pid::octave));
         request.polish    = get (pid::polish) / 100.0f;
         request.air       = get (pid::air) / 100.0f;
+        request.engineId  = selectedEngineId();
 
         // When the host reports a tempo, the vocal is generated at that tempo and the BPM knob follows it.
         const double hostBpm = proc.getHostBpm();
@@ -605,7 +610,37 @@ private:
     std::atomic<juce::uint32> lastChangeMs { 0 };
     static constexpr const char* autoIds[] = { pid::genre, pid::voiceType, pid::emotion, pid::style, pid::key, pid::scale, pid::octave,
                                                 pid::legato, pid::body, pid::layers, pid::polish, pid::air, pid::bpm };
+    juce::String selectedEngineId() const
+    {
+        const auto i = engineCombo.getSelectedItemIndex();
+        return i >= 0 && i < engineIds.size() ? engineIds[i] : juce::String ("builtin");
+    }
+
+    void setupEngineCombo()
+    {
+        engineIds.clear();
+        engineCombo.clear (juce::dontSendNotification);
+
+        for (auto& e : engines::listEngines())
+        {
+            engineIds.add (e.id);
+            engineCombo.addItem ("ENGINE: " + e.name, engineIds.size());
+        }
+
+        const auto saved = apvts.state.getProperty ("engine_choice", "builtin").toString();
+        const auto idx = juce::jmax (0, engineIds.indexOf (saved));
+        engineCombo.setSelectedItemIndex (idx, juce::dontSendNotification);
+        engineCombo.onChange = [this]
+        {
+            apvts.state.setProperty ("engine_choice", selectedEngineId(), nullptr);
+            autoDirty.store (true);
+            lastChangeMs.store (juce::Time::getMillisecondCounter());
+        };
+    }
+
     GenreList genreList;
+    juce::ComboBox engineCombo;
+    juce::StringArray engineIds;
     juce::TextEditor phrase;
     juce::TextButton generateButton, prevButton, nextButton, saveButton, openButton;
     juce::ToggleButton powerButton;

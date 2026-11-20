@@ -6,6 +6,7 @@
 #include <vector>
 #include "DSP/VoxEngine.h"
 #include "Voice/PhraseRenderer.h"
+#include "VoiceEngines.h"
 
 using namespace epinox::dsp;
 
@@ -915,6 +916,48 @@ void testVoiceGenerator()
         check (cancelled == nullptr && calls > 0, "rendering can be cancelled");
     }
 }
+
+void testVoiceEngines()
+{
+    using namespace epinox;
+    std::printf ("\n[Voice engines]\n");
+    auto root = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("epinox_voices_test");
+    root.deleteRecursively();
+
+    auto mk = [&] (const char* dir, const juce::String& manifest, bool model)
+    {
+        auto d = root.getChildFile (dir);
+        d.createDirectory();
+        if (manifest.isNotEmpty()) d.getChildFile ("voicepack.json").replaceWithText (manifest);
+        if (model) d.getChildFile ("a.onnx").replaceWithText ("x");
+    };
+    mk ("good", R"({"id":"good","name":"Good","type":"onnx","license":"Commercial use allowed","models":["a.onnx"]})", true);
+    mk ("nolic", R"({"id":"nolic","name":"No Lic","type":"onnx","license":"","models":["a.onnx"]})", true);
+    mk ("nomodel", R"({"id":"nomodel","name":"No Model","type":"onnx","license":"ok","models":["a.onnx"]})", false);
+    mk ("nojson", "", false);
+    mk ("badid", R"({"id":"builtin","name":"X","type":"onnx","license":"ok","models":["a.onnx"]})", true);
+
+    const auto packs = engines::scanPacks (root);
+    int valid = 0;
+    for (auto& p : packs) valid += p.valid ? 1 : 0;
+    check (packs.size() == 5 && valid == 1, fmt ("5 packs found, only the complete one is valid (%.0f valid)", static_cast<double> (valid)));
+
+    const auto list = engines::listEngines (root);
+    check (list.size() == 2 && list[0].id == "builtin" && list[1].id == "good", "engine list = built-in + the valid pack");
+
+    GenerationRequest r;
+    r.phrase = "hello world"; r.sampleRate = 44100.0; r.bpm = 120; r.engineId = "good";
+    auto a = engines::render (r, [] { return false; }, root);
+    check (a.clip != nullptr && a.note.isNotEmpty(), "pack without runtime falls back to built-in and says so");
+    r.engineId = "ghost";
+    auto b = engines::render (r, [] { return false; }, root);
+    check (b.clip != nullptr && b.note.contains ("not found"), "unknown pack falls back and says so");
+    r.engineId = "builtin";
+    auto c = engines::render (r, [] { return false; }, root);
+    check (c.clip != nullptr && c.note.isEmpty(), "built-in renders with no notice");
+    root.deleteRecursively();
+}
+
 } // namespace
 
 int main()
@@ -926,6 +969,7 @@ int main()
     testEngine();
     testGeneratedInput();
     testVoiceGenerator();
+    testVoiceEngines();
 
     std::printf ("\n%s (%d failed)\n", failures == 0 ? "ALL CHECKS PASSED" : "SOME CHECKS FAILED", failures);
     return failures;

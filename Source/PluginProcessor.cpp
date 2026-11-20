@@ -9,7 +9,7 @@ namespace
         genVoice ("gen_voice"), genEmotion ("gen_emotion"), genStyle ("gen_style"), genBpm ("gen_bpm"),
         genVariation ("gen_variation"), genKey ("gen_key"), genScale ("gen_scale"),
         genLegato ("gen_legato"), genBody ("gen_body"), genLayers ("gen_layers"),
-        genOctave ("gen_octave"), genPolish ("gen_polish"), genAir ("gen_air"), genMelody ("gen_melody");
+        genEngine ("gen_engine"), genOctave ("gen_octave"), genPolish ("gen_polish"), genAir ("gen_air"), genMelody ("gen_melody");
 
     juce::String keyFor (const epinox::GenerationRequest& r)
     {
@@ -18,7 +18,7 @@ namespace
                + "|" + juce::String (r.key) + "|" + juce::String (r.scale)
                + "|" + juce::String (r.legato, 3) + "|" + juce::String (r.body, 3) + "|" + juce::String (r.layers, 3)
                + "|" + juce::String (r.octave) + "|" + juce::String (r.polish, 3) + "|" + juce::String (r.air, 3)
-               + "|" + juce::String (r.melodyVariation);
+               + "|" + juce::String (r.melodyVariation) + "|" + r.engineId;
     }
 
     epinox::GenerationRequest requestFromState (const juce::ValueTree& s, double sampleRate)
@@ -36,6 +36,7 @@ namespace
         r.body = s.getProperty (genBody, 0.0);
         r.layers = s.getProperty (genLayers, 0.0);
         r.octave = s.getProperty (genOctave, 0);
+        r.engineId = s.getProperty (genEngine, "builtin").toString();
         r.polish = s.getProperty (genPolish, 0.0);
         r.air = s.getProperty (genAir, 0.0);
         r.melodyVariation = s.getProperty (genMelody, -1);
@@ -306,6 +307,7 @@ bool VoxProcessor::requestGeneration (epinox::GenerationRequest request)
             s.setProperty (genBody, request.body, nullptr);
             s.setProperty (genLayers, request.layers, nullptr);
             s.setProperty (genOctave, request.octave, nullptr);
+            s.setProperty (genEngine, request.engineId, nullptr);
             s.setProperty (genPolish, request.polish, nullptr);
             s.setProperty (genAir, request.air, nullptr);
             s.setProperty (genMelody, request.melodyVariation, nullptr);

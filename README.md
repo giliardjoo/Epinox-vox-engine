@@ -153,3 +153,16 @@ Source/
   UI/                   neon look and feel and custom widgets
 Tests/                  DspTests.cpp (engines and generator), GenerationServiceTest.cpp (async service)
 ```
+
+## Voice engines (v0.10)
+
+The ENGINE selector (left column) chooses how the vocal is rendered. `Built-in synth` is the offline synthesiser.
+Neural voice packs are folders in `%APPDATA%\EPINOX\VOX ENGINE\Voices\<pack>\` (macOS: `~/Library/Application Support/EPINOX/VOX ENGINE/Voices/`)
+with a `voicepack.json`:
+
+```json
+{ "id": "my-voice", "name": "My Voice", "type": "onnx", "license": "what the license allows", "models": ["acoustic.onnx", "vocoder.onnx"] }
+```
+
+A pack is listed only when it has an id, a name, a stated license and every model file exists. This version detects and validates packs;
+the ONNX runtime that executes them is not included yet, so a selected pack falls back to the built-in synth and the status line says so.

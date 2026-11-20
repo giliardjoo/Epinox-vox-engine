@@ -1,5 +1,5 @@
 #include "GenerationService.h"
-#include "Voice/PhraseRenderer.h"
+#include "VoiceEngines.h"
 
 namespace epinox
 {
@@ -17,7 +17,8 @@ namespace
 
         JobStatus runJob() override
         {
-            std::shared_ptr<GeneratedClip> clip = voice::renderPhrase (request, [this] { return shouldExit(); });
+            auto rendered = engines::render (request, [this] { return shouldExit(); });
+            std::shared_ptr<GeneratedClip> clip = std::move (rendered.clip);
 
             GenerationResult result;
 
@@ -25,6 +26,9 @@ namespace
             {
                 result.ok = true;
                 result.message = "Vocal ready: " + clip->description + ". It plays in time with your host's transport.";
+
+                if (rendered.note.isNotEmpty())
+                    result.message += " " + rendered.note;
 
                 if (clip->truncated > 0)
                     result.message += " The phrase was too long for 8 bars, " + juce::String (clip->truncated) + " syllables were left out.";
