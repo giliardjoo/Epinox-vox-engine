@@ -21,6 +21,9 @@ struct Composition
     std::vector<Note> notes;
     double loopBeats = 4.0;
     int truncated = 0;
+    int rootPc = 0;                // scale root as a pitch class, used by the melody search
+    std::vector<int> scalePcs;     // scale as semitones above the root
+    float centreMidi = 60.0f;
 };
 
 // Turns syllables into a rhythm and a melody that fits the genre scale and the chosen style.
@@ -40,6 +43,9 @@ public:
 
         Composition c;
         c.syllables = std::move (syllables);
+        c.rootPc = juce::jlimit (0, 11, key);
+        c.scalePcs = scaleNotes_(G, scaleChoice);
+        c.centreMidi = V.centreMidi + 12.0f * static_cast<float> (juce::jlimit (-2, 2, octave));
 
         const int count = static_cast<int> (c.syllables.size());
         const auto forced = scaleIntervals (scaleChoice);
@@ -218,6 +224,12 @@ public:
     }
 
 private:
+    static std::vector<int> scaleNotes_ (const GenreProfile& g, int scaleChoice)
+    {
+        const auto forced = scaleIntervals (scaleChoice);
+        return forced.empty() ? g.scale : forced;
+    }
+
     static double pickDuration (const StyleProfile& s, juce::Random& rng)
     {
         float total = 0.0f;

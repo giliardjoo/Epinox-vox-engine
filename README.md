@@ -166,3 +166,13 @@ with a `voicepack.json`:
 
 A pack is listed only when it has an id, a name, a stated license and every model file exists. This version detects and validates packs;
 the ONNX runtime that executes them is not included yet, so a selected pack falls back to the built-in synth and the status line says so.
+
+## Smarter melodies and LISTEN (v0.11)
+
+- **Melody search.** For the stepwise, motif and leaping styles the generator no longer takes the first melody it composes. It composes 16
+  candidates, scores them for musicality (singable steps, chord tones on strong beats, a clear high point, a phrase that ends on the root or
+  fifth, staying in the voice's range), then refines the best one by simulated annealing, a "quantum-inspired" optimisation that runs on a
+  normal CPU. Notes always stay inside the chosen scale, and the result is the same for the same phrase and variation, so LOCK MELODY still works.
+- **LISTEN.** The plugin keeps the last 8 seconds of the audio coming into it. Press LISTEN next to the Key menu and it detects the key
+  (Krumhansl-Kessler profiles over a pitch-class profile) and sets Key and Scale. Play the bass or chords through the plugin first.
+- Polish now measures loudness with a short-term RMS detector instead of peaks.

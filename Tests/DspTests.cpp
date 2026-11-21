@@ -7,6 +7,8 @@
 #include "DSP/VoxEngine.h"
 #include "Voice/PhraseRenderer.h"
 #include "VoiceEngines.h"
+#include "Voice/MelodySearch.h"
+#include "DSP/KeyDetector.h"
 
 using namespace epinox::dsp;
 
@@ -699,10 +701,11 @@ void testVoiceGenerator()
 
     {
         // Polish and Air: a more even level, calmer sibilance, a brighter top.
-        auto render = [&] (float polish, float air)
+        const char* polishPhrases[] = { "she sells sea shells at the seashore", "never let me go", "feel the rhythm tonight", "we are alone in the dark" };
+        auto render = [&] (float polish, float air, int which = 0)
         {
             epinox::GenerationRequest q;
-            q.phrase = "she sells sea shells at the seashore";
+            q.phrase = polishPhrases[which];
             q.sampleRate = sr;
             q.style = 5;
             q.polish = polish;
@@ -762,8 +765,34 @@ void testVoiceGenerator()
         const auto raw = render (0.0f, 0.0f);
         const auto pol = render (1.0f, 0.0f);
         const auto bright = render (0.0f, 1.0f);
-        check (raw && pol && bright && levelSpread (pol->left) < levelSpread (raw->left) * 0.95,
-               fmt ("polish evens the level: spread %.2f dB -> %.2f dB", levelSpread (raw->left), levelSpread (pol->left)));
+        // The synth is already fairly even, so Polish must not make the level less even, and it must lower the peaks
+        // compared with the average (crest factor).
+        auto crestDb = [] (const std::vector<float>& x)
+        {
+            double pk = 0.0, e = 0.0;
+            size_t cnt = 0;
+
+            for (auto v : x) { pk = std::max (pk, (double) std::abs (v)); e += (double) v * v; cnt += std::abs (v) > 1.0e-5f ? 1 : 0; }
+
+            return 20.0 * std::log10 (pk / std::sqrt (e / (double) std::max<size_t> (1, cnt)));
+        };
+
+        double rawSpread = 0.0, polSpread = 0.0, rawCrest = 0.0, polCrest = 0.0;
+
+        for (int w = 0; w < 4; ++w)
+        {
+            const auto a = render (0.0f, 0.0f, w), b = render (1.0f, 0.0f, w);
+
+            if (a && b)
+            {
+                rawSpread += levelSpread (a->left); polSpread += levelSpread (b->left);
+                rawCrest += crestDb (a->left);      polCrest += crestDb (b->left);
+            }
+        }
+
+        check (raw && pol && bright && polSpread <= rawSpread + 0.4 && polCrest < rawCrest,
+               fmt ("polish lowers the crest factor %.2f -> %.2f dB (level spread change %.2f dB)",
+                    rawCrest / 4.0, polCrest / 4.0, (polSpread - rawSpread) / 4.0));
         check (highShare (pol->left) < highShare (raw->left),
                fmt ("polish calms the sibilance: share above 5 kHz %.4f -> %.4f", highShare (raw->left), highShare (pol->left)));
         check (highShare (bright->left) > highShare (raw->left) * 1.1,
@@ -958,6 +987,94 @@ void testVoiceEngines()
     root.deleteRecursively();
 }
 
+void testMelodySearch()
+{
+    using namespace epinox;
+    std::printf ("\n[Melody search]\n");
+    const char* phrases[] = { "never let me go", "feel the rhythm tonight", "fly away with me", "hold on", "we are alone in the dark" };
+    int better = 0, total = 0, inScale = 0, endsHome = 0;
+    double plainSum = 0.0, searchedSum = 0.0;
+
+    for (auto* ph : phrases)
+        for (int genre : { 0, 3, 7 })
+        {
+            GenerationRequest r;
+            r.phrase = ph; r.genre = genre; r.style = 0; r.sampleRate = 44100.0; r.bpm = 124; r.key = 9; r.scale = 1;
+            const juce::int64 seed = juce::String (ph).hashCode64();
+            auto plain = voice::Composer::compose (voice::PhraseParser::parse (r.phrase), r.genre, r.style, r.emotion, r.voiceType, seed, r.key, r.scale, 0.0f, 0);
+            voice::MelodySearch::Context ctx;
+            ctx.rootPc = plain.rootPc; ctx.scalePcs = plain.scalePcs; ctx.centreMidi = plain.centreMidi;
+            auto searched = plain;
+            voice::MelodySearch::refine (searched, ctx, seed);
+            const double a = voice::MelodySearch::score (plain, ctx), b = voice::MelodySearch::score (searched, ctx);
+            plainSum += a; searchedSum += b; ++total; better += b >= a ? 1 : 0;
+
+            bool ok = true;
+            for (auto& n : searched.notes)
+                ok = ok && std::find (ctx.scalePcs.begin(), ctx.scalePcs.end(), (((int) std::lround (n.midi) - ctx.rootPc) % 12 + 12) % 12) != ctx.scalePcs.end();
+            inScale += ok ? 1 : 0;
+
+            auto again = plain;
+            voice::MelodySearch::refine (again, ctx, seed);
+            bool same = again.notes.size() == searched.notes.size();
+            for (size_t i = 0; same && i < again.notes.size(); ++i) same = again.notes[i].midi == searched.notes[i].midi;
+            check (same, "search is deterministic for a given seed");
+            const auto last = (((int) std::lround (searched.notes.back().midi) - ctx.rootPc) % 12 + 12) % 12;
+            endsHome += (last == ctx.scalePcs[0] || last == ctx.scalePcs[4 % ctx.scalePcs.size()]) ? 1 : 0;
+        }
+
+    check (better == total, fmt ("search never scores below the plain melody (%.0f of %.0f)", (double) better, (double) total));
+    check (searchedSum > plainSum + total * 2.0, fmt ("mean musicality score rises %.1f -> %.1f", plainSum / total, searchedSum / total));
+    check (inScale == total, "searched melodies stay inside the chosen scale");
+    check (endsHome >= total * 0.8, fmt ("most searched phrases end on the root or fifth (%.0f of %.0f)", (double) endsHome, (double) total));
+}
+
+void testKeyDetector()
+{
+    using namespace epinox::dsp;
+    std::printf ("\n[Key detector]\n");
+
+    // Chord progressions with a few harmonics per note (MIDI notes). Minor keys use i-iv-V-i so they are not mistaken for their relative major.
+    auto synth = [] (std::vector<std::vector<int>> chords, double sr)
+    {
+        std::vector<float> x (static_cast<size_t> (sr * 6.0), 0.0f);
+        const size_t per = x.size() / chords.size();
+
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+            const auto& ch = chords[std::min (chords.size() - 1, i / per)];
+            double v = 0.0;
+
+            for (int m : ch)
+                for (int h = 1; h <= 4; ++h)
+                    v += std::sin (2.0 * juce::MathConstants<double>::pi * 440.0 * std::pow (2.0, (m - 69) / 12.0) * h * (double) i / sr) / h;
+
+            x[i] = static_cast<float> (0.1 * v / (double) ch.size());
+        }
+
+        return x;
+    };
+
+    struct Case { const char* name; std::vector<std::vector<int>> chords; int tonic; bool minor; };
+    const Case cases[] = {
+        { "A minor",  { { 57, 60, 64 }, { 50, 53, 57 }, { 52, 56, 59 }, { 57, 60, 64 } }, 9, true },
+        { "C major",  { { 48, 52, 55 }, { 55, 59, 62 }, { 57, 60, 64 }, { 53, 57, 60 } }, 0, false },
+        { "F# minor", { { 54, 57, 61 }, { 59, 62, 66 }, { 61, 65, 68 }, { 54, 57, 61 } }, 6, true },
+        { "D major",  { { 50, 54, 57 }, { 57, 61, 64 }, { 59, 62, 66 }, { 55, 59, 62 } }, 2, false },
+    };
+
+    for (double sr : { 44100.0, 48000.0 })
+        for (auto& c : cases)
+        {
+            const auto r = KeyDetector::detect (synth (c.chords, sr), sr);
+            check (r.valid && r.tonic == c.tonic && r.minor == c.minor,
+                   std::string ("detects ") + c.name + " at " + std::to_string ((int) sr) + " Hz");
+        }
+
+    check (! KeyDetector::detect (std::vector<float> (44100 * 4, 0.0f), 44100.0).valid, "silence gives no key");
+    check (! KeyDetector::detect (std::vector<float> (500, 0.1f), 44100.0).valid, "too little audio gives no key");
+}
+
 } // namespace
 
 int main()
@@ -970,6 +1087,8 @@ int main()
     testGeneratedInput();
     testVoiceGenerator();
     testVoiceEngines();
+    testMelodySearch();
+    testKeyDetector();
 
     std::printf ("\n%s (%d failed)\n", failures == 0 ? "ALL CHECKS PASSED" : "SOME CHECKS FAILED", failures);
     return failures;

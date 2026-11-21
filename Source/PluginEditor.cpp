@@ -156,6 +156,30 @@ public:
         phrase.setText (apvts.state.getProperty ("phrase").toString(), false);
         phrase.onTextChange = [this] { apvts.state.setProperty ("phrase", phrase.getText(), nullptr); };
 
+        listenButton.setButtonText ("LISTEN");
+        listenButton.setTooltip ("Detects the key of the audio coming into the plugin (put the bass or chords on this track's input) and sets Key and Scale to match.");
+        listenButton.onClick = [this]
+        {
+            const auto r = proc.detectKeyFromInput();
+
+            if (! r.valid)
+            {
+                setStatus ("No key found. Play the track through the plugin for a few seconds first (the input must carry bass, chords or a melody).", true);
+                return;
+            }
+
+            auto setChoice = [this] (const char* id, int index)
+            {
+                if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (id)))
+                    p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (index)));
+            };
+
+            setChoice (pid::key, r.tonic);
+            setChoice (pid::scale, r.minor ? 1 : 2);   // Natural Minor or Major
+            setStatus ("Key set to " + keyNames()[r.tonic] + (r.minor ? " minor" : " major")
+                           + (r.confidence < 0.35f ? ". The match is weak; check it by ear." : "."), r.confidence < 0.35f);
+        };
+
         lockButton.setComponentID ("lock");
         lockButton.setButtonText ("LOCK MELODY");
         lockAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, pid::lockMelody, lockButton);
@@ -195,7 +219,7 @@ public:
 
         for (auto* c : std::initializer_list<juce::Component*> {
                  &genreList, &engineCombo, &phrase, &generateButton,
-                 &voiceCombo, &emotionCombo, &styleCombo, &keyCombo, &scaleCombo, &pitchKnob, &formantKnob, &bpmKnob, &legatoKnob, &bodyKnob, &layersKnob, &octaveKnob, &polishKnob, &airKnob, &lockButton, &exportButton, &dragHandle,
+                 &voiceCombo, &emotionCombo, &styleCombo, &keyCombo, &listenButton, &scaleCombo, &pitchKnob, &formantKnob, &bpmKnob, &legatoKnob, &bodyKnob, &layersKnob, &octaveKnob, &polishKnob, &airKnob, &lockButton, &exportButton, &dragHandle,
                  &mixKnob, &outKnob, &waveform, &meterIn, &meterOut,
                  &chopPanel, &transformPanel, &effectsPanel, &spatialPanel,
                  &prevButton, &nextButton, &saveButton, &openButton, &powerButton,
@@ -307,7 +331,8 @@ public:
                 row[i]->setBounds (236 + i * 102, 200, 102, 128);
         }
 
-        keyCombo.setBounds   (236, 334, 196, 46);
+        keyCombo.setBounds   (236, 334, 132, 46);
+        listenButton.setBounds (372, 334, 60, 46);
         scaleCombo.setBounds (236, 386, 196, 46);
 
         octaveKnob.setBounds (444, 332, 102, 128);
@@ -649,7 +674,7 @@ private:
     NeonCombo voiceCombo, emotionCombo, styleCombo, keyCombo, scaleCombo;
     NeonKnob pitchKnob, formantKnob, bpmKnob, legatoKnob, bodyKnob, layersKnob, octaveKnob, polishKnob, airKnob, mixKnob, outKnob;
     juce::ToggleButton lockButton;
-    juce::TextButton exportButton;
+    juce::TextButton exportButton, listenButton;
     DragHandle dragHandle;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> lockAttachment;
     WaveformView waveform;

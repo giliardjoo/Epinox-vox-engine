@@ -9,6 +9,7 @@
 #include "PresetManager.h"
 #include "GenerationService.h"
 #include "DSP/VoxEngine.h"
+#include "DSP/KeyDetector.h"
 
 class VoxProcessor : public juce::AudioProcessor
 {
@@ -73,10 +74,19 @@ public:
     // Written by the audio thread, read by the UI. Lock-free.
     std::atomic<float> inPeak { 0.0f }, inRms { 0.0f }, outPeak { 0.0f }, outRms { 0.0f };
     std::atomic<bool> clipped { false };
+
+    // The last few seconds of the track audio coming into the plugin, kept so the key can be detected on demand.
+    // Written by the audio thread, copied by the UI thread.
+    static constexpr int listenSeconds = 8;
+    epinox::dsp::KeyDetector::Result detectKeyFromInput() const;
     std::array<std::atomic<float>, scopeSize> scope;
     std::atomic<int> scopeWrite { 0 };
 
 private:
+    std::vector<std::atomic<float>> listenRing = std::vector<std::atomic<float>> (192000 * listenSeconds);
+    std::atomic<int> listenWrite { 0 }, listenLength { 0 };
+    std::atomic<bool> listenFilled { false };
+
     epinox::dsp::EngineParams readParams() const;
 
     void setClip (std::shared_ptr<epinox::GeneratedClip> newClip, const juce::String& key);

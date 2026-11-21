@@ -111,6 +111,10 @@ void VoxProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     engine.prepare (sampleRate, samplesPerBlock);
     setLatencySamples (epinox::dsp::VoxEngine::latencySamples);
 
+    listenWrite.store (0);
+    listenFilled.store (false);
+    listenLength.store (juce::jmin (static_cast<int> (listenRing.size()), static_cast<int> (sampleRate * listenSeconds)));
+
     binSamples = juce::jmax (1, static_cast<int> (sampleRate * 4.0 / scopeSize)); // 4 s window
     binCount = 0;
     binAcc = 0.0f;
@@ -143,6 +147,33 @@ void VoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     for (int c = getTotalNumInputChannels(); c < getTotalNumOutputChannels(); ++c)
         buffer.clear (c, 0, numSamples);
+
+    // Keep a mono copy of the incoming audio (before any processing) for the key detector.
+    {
+        const int len = listenLength.load (std::memory_order_relaxed);
+        int w = listenWrite.load (std::memory_order_relaxed);
+
+        if (len > 0 && numChannels > 0)
+        {
+            for (int i = 0; i < numSamples; ++i)
+            {
+                float m = 0.0f;
+
+                for (int c = 0; c < juce::jmin (2, numChannels); ++c)
+                    m += buffer.getReadPointer (c)[i];
+
+                listenRing[static_cast<size_t> (w)].store (m / static_cast<float> (juce::jmin (2, numChannels)), std::memory_order_relaxed);
+
+                if (++w >= len)
+                {
+                    w = 0;
+                    listenFilled.store (true, std::memory_order_relaxed);
+                }
+            }
+
+            listenWrite.store (w, std::memory_order_release);
+        }
+    }
 
     auto measure = [&] (std::atomic<float>& peakOut, std::atomic<float>& rmsOut)
     {
@@ -404,4 +435,22 @@ void VoxProcessor::setStateInformation (const void* data, int sizeInBytes)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new VoxProcessor();
+}
+
+epinox::dsp::KeyDetector::Result VoxProcessor::detectKeyFromInput() const
+{
+    const int len = listenLength.load();
+    const int w = listenWrite.load (std::memory_order_acquire);
+    const bool full = listenFilled.load();
+    const int have = full ? len : w;
+
+    if (have <= 0)
+        return {};
+
+    std::vector<float> mono (static_cast<size_t> (have));
+
+    for (int i = 0; i < have; ++i)
+        mono[static_cast<size_t> (i)] = listenRing[static_cast<size_t> (((full ? w : 0) + i) % len)].load (std::memory_order_relaxed);
+
+    return epinox::dsp::KeyDetector::detect (mono, currentSampleRate);
 }

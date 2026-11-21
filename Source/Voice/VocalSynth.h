@@ -723,20 +723,29 @@ private:
                 const double att = 1.0 - std::exp (-1.0 / (0.002 * sr)), rel = 1.0 - std::exp (-1.0 / (0.150 * sr));
                 const size_t look = static_cast<size_t> (0.004 * sr);   // the detector looks ahead, so peaks are caught
 
-                // Threshold = the average level of the sung parts (silence ignored), so only the louder parts are pulled down.
-                double thrDb = 0.0;
+                // Level detector: short-term RMS (about 12 ms) looking a few ms ahead, closer to how loudness is heard than peaks.
+                std::vector<float> det (n);
                 {
-                    double e2 = 0.0, sumDb = 0.0, maxEnv = 1.0e-6;
-                    std::vector<float> envs (n);
+                    double p2 = 0.0;
+                    const double c = 1.0 - std::exp (-1.0 / (0.012 * sr));
 
                     for (size_t i = 0; i < n; ++i)
                     {
                         const size_t j = std::min (n - 1, i + look);
-                        const double w = std::max (std::abs (static_cast<double> (clip.left[j])), std::abs (static_cast<double> (clip.right[j])));
-                        e2 += (w > e2 ? att : rel) * (w - e2);
-                        envs[i] = static_cast<float> (e2);
-                        maxEnv = std::max (maxEnv, e2);
+                        const double l = clip.left[j], r = clip.right[j];
+                        p2 += c * (0.5 * (l * l + r * r) - p2);
+                        det[i] = static_cast<float> (std::sqrt (p2));
                     }
+                }
+
+                // Threshold = the average level of the sung parts (silence ignored), so only the louder parts are pulled down.
+                double thrDb = 0.0;
+                {
+                    double sumDb = 0.0, maxEnv = 1.0e-6;
+                    const auto& envs = det;
+
+                    for (size_t i = 0; i < n; ++i)
+                        maxEnv = std::max (maxEnv, static_cast<double> (envs[i]));
 
                     size_t cnt = 0;
 
@@ -760,6 +769,7 @@ private:
 
                     const size_t j = std::min (n - 1, i + look);
                     const double whole = std::max (std::abs (static_cast<double> (clip.left[j])), std::abs (static_cast<double> (clip.right[j])));
+                    const double level = det[i];
                     const double ratioHf = bandEnv / std::max (1.0e-5, env + 1.0e-5);   // band against the whole
                     const double over = std::max (0.0, ratioHf - 0.35);
                     const double cut = std::min (0.75, over * 1.4) * polish;   // up to 75 % of the band removed
@@ -768,7 +778,7 @@ private:
                     r -= br * cut;
 
                     env += (whole > env ? att : rel) * (whole - env);
-                    const double envDb = 20.0 * std::log10 (std::max (env, 1.0e-6));
+                    const double envDb = 20.0 * std::log10 (std::max (level, 1.0e-6));
                     const double targetGr = envDb > thrDb ? (envDb - thrDb) * (1.0 - 1.0 / ratio) : 0.0;
                     grDb += (targetGr > grDb ? att : rel) * (targetGr - grDb);
                     const double g = std::pow (10.0, -grDb / 20.0);
