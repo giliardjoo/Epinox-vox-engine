@@ -1075,6 +1075,37 @@ void testKeyDetector()
     check (! KeyDetector::detect (std::vector<float> (500, 0.1f), 44100.0).valid, "too little audio gives no key");
 }
 
+void testMorph()
+{
+    using namespace epinox::voice;
+    std::printf ("\n[Voice morph]\n");
+    const auto f = voiceProfile (0), m = voiceProfile (1);
+    const auto h = morphVoice (0, 1, 0.5f);
+    check (morphVoice (0, 1, 0.0f).centreMidi == f.centreMidi && morphVoice (0, -1, 0.7f).centreMidi == f.centreMidi, "no morph leaves the voice as it was");
+    check (morphVoice (0, 1, 1.0f).centreMidi == m.centreMidi && morphVoice (0, 1, 1.0f).formantScale == m.formantScale, "full morph is the target voice");
+    check (h.centreMidi > m.centreMidi && h.centreMidi < f.centreMidi && h.formantScale > m.formantScale && h.formantScale < f.formantScale,
+           "half morph sits between the two voices");
+    check (morphVoice (0, 4, 0.4f).robotic == false && morphVoice (0, 4, 0.6f).robotic, "robotic switches on past the half-way point");
+
+    auto meanMidi = [] (float amt)
+    {
+        auto c = Composer::compose (PhraseParser::parse ("never let me go"), 0, 0, 0, 0, 42, 9, 1, 0.0f, 0, 1, amt);
+        double sum = 0.0;
+        for (auto& n : c.notes) sum += n.midi;
+        return sum / (double) c.notes.size();
+    };
+    check (meanMidi (1.0f) < meanMidi (0.0f) - 5.0, fmt ("morphing female to male lowers the melody (%.1f -> %.1f)", meanMidi (0.0f), meanMidi (1.0f)));
+
+    epinox::GenerationRequest r;
+    r.phrase = "never let me go"; r.sampleRate = 44100.0; r.bpm = 120;
+    auto a = renderPhrase (r);
+    r.morphTo = 1; r.morph = 0.6f;
+    auto b = renderPhrase (r);
+    double diff = 0.0;
+    for (size_t i = 0; a && b && i < std::min (a->left.size(), b->left.size()); ++i) diff += std::abs (a->left[i] - b->left[i]);
+    check (a && b && diff > 1.0, "a morphed voice renders differently");
+}
+
 } // namespace
 
 int main()
@@ -1089,6 +1120,7 @@ int main()
     testVoiceEngines();
     testMelodySearch();
     testKeyDetector();
+    testMorph();
 
     std::printf ("\n%s (%d failed)\n", failures == 0 ? "ALL CHECKS PASSED" : "SOME CHECKS FAILED", failures);
     return failures;

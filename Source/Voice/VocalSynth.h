@@ -72,7 +72,7 @@ private:
     public:
         Synth (const Composition& c, const GenerationRequest& r, const std::function<bool()>& cancel)
             : comp (c), req (r), cancelled (cancel),
-              V (voiceProfile (r.voiceType)), E (emotionProfile (r.emotion)), S (styleProfile (r.style)),
+              V (morphVoice (r.voiceType, r.morphTo, r.morph)), E (emotionProfile (r.emotion)), S (styleProfile (r.style)),
               sr (r.sampleRate), spb (60.0 / r.bpm), rng (0x5eed1234 + r.variation)
         {
             voiced = V.voiced && ! S.whisper;

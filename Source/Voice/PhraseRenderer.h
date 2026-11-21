@@ -25,7 +25,7 @@ inline std::unique_ptr<GeneratedClip> renderPhrase (const GenerationRequest& r, 
     const bool searchable = mode == StyleProfile::Mode::stepwise || mode == StyleProfile::Mode::motif || mode == StyleProfile::Mode::leaps;
 
     // The first candidate is the plain composition for this seed, so the search can only improve on it.
-    auto composition = Composer::compose (syllables, r.genre, r.style, r.emotion, r.voiceType, seed, r.key, r.scale, r.legato, r.octave);
+    auto composition = Composer::compose (syllables, r.genre, r.style, r.emotion, r.voiceType, seed, r.key, r.scale, r.legato, r.octave, r.morphTo, r.morph);
 
     if (searchable)
     {
@@ -43,7 +43,7 @@ inline std::unique_ptr<GeneratedClip> renderPhrase (const GenerationRequest& r, 
                 return nullptr;
 
             auto cand = Composer::compose (syllables, r.genre, r.style, r.emotion, r.voiceType,
-                                           seed + static_cast<juce::int64> (i) * 1315423911LL, r.key, r.scale, r.legato, r.octave);
+                                           seed + static_cast<juce::int64> (i) * 1315423911LL, r.key, r.scale, r.legato, r.octave, r.morphTo, r.morph);
             const double s = MelodySearch::score (cand, ctx);
 
             if (s > bestScore)

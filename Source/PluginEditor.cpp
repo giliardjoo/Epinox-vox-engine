@@ -92,7 +92,7 @@ namespace
 }
 
 //==============================================================================
-// All controls live in this 1100 x 812 design space; the editor scales it to the window.
+// All controls live in this 1100 x 868 design space; the editor scales it to the window.
 class VoxContent : public juce::Component, private juce::Timer, private juce::AudioProcessorValueTreeState::Listener
 {
 public:
@@ -105,6 +105,7 @@ public:
           styleCombo   (p.apvts, pid::style,     "STYLE"),
           keyCombo     (p.apvts, pid::key,       "KEY"),
           scaleCombo   (p.apvts, pid::scale,     "SCALE"),
+          morphCombo   (p.apvts, pid::morphTo,  "MORPH TO"),
           pitchKnob    (p.apvts, pid::pitch,   "PITCH",   " st", 1),
           formantKnob  (p.apvts, pid::formant, "FORMANT", " st", 1),
           bpmKnob      (p.apvts, pid::bpm,     "BPM",     "",    1),
@@ -155,6 +156,16 @@ public:
         phrase.setTextToShowWhenEmpty ("Type a phrase...   One phrase. Infinite possibilities.", textDim);
         phrase.setText (apvts.state.getProperty ("phrase").toString(), false);
         phrase.onTextChange = [this] { apvts.state.setProperty ("phrase", phrase.getText(), nullptr); };
+
+        morphSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+        morphSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 64, 24);
+        morphSlider.setTextValueSuffix (" %");
+        morphSlider.setColour (juce::Slider::trackColourId, neon);
+        morphSlider.setColour (juce::Slider::thumbColourId, neon);
+        morphSlider.setColour (juce::Slider::textBoxTextColourId, textDim);
+        morphSlider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+        morphSlider.setTooltip ("How far the voice moves from VOICE towards MORPH TO.");
+        morphAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, pid::morphAmt, morphSlider);
 
         listenButton.setButtonText ("LISTEN");
         listenButton.setTooltip ("Detects the key of the audio coming into the plugin (put the bass or chords on this track's input) and sets Key and Scale to match.");
@@ -219,7 +230,7 @@ public:
 
         for (auto* c : std::initializer_list<juce::Component*> {
                  &genreList, &engineCombo, &phrase, &generateButton,
-                 &voiceCombo, &emotionCombo, &styleCombo, &keyCombo, &listenButton, &scaleCombo, &pitchKnob, &formantKnob, &bpmKnob, &legatoKnob, &bodyKnob, &layersKnob, &octaveKnob, &polishKnob, &airKnob, &lockButton, &exportButton, &dragHandle,
+                 &voiceCombo, &emotionCombo, &styleCombo, &keyCombo, &listenButton, &scaleCombo, &morphCombo, &morphSlider, &pitchKnob, &formantKnob, &bpmKnob, &legatoKnob, &bodyKnob, &layersKnob, &octaveKnob, &polishKnob, &airKnob, &lockButton, &exportButton, &dragHandle,
                  &mixKnob, &outKnob, &waveform, &meterIn, &meterOut,
                  &chopPanel, &transformPanel, &effectsPanel, &spatialPanel,
                  &prevButton, &nextButton, &saveButton, &openButton, &powerButton,
@@ -313,8 +324,10 @@ public:
         openButton.setBounds (858, 18, 62, 30);
         powerButton.setBounds (1040, 12, 42, 42);
 
-        genreList.setBounds (16, 80, 204, 410);
-        engineCombo.setBounds (16, 500, 204, 46);
+        genreList.setBounds (16, 80, 204, 466);
+        engineCombo.setBounds (16, 556, 204, 46);
+        morphCombo.setBounds (236, 556, 196, 46);
+        morphSlider.setBounds (444, 566, 404, 30);
 
         phrase.setBounds (236, 80, 490, 52);
         generateButton.setBounds (738, 80, 110, 52);
@@ -351,12 +364,12 @@ public:
         outKnob.setBounds  (994, 390, 90, 112);
 
         const int w = 258, gap = 12;
-        chopPanel.setBounds      (16 + 0 * (w + gap), 560, w, 228);
-        transformPanel.setBounds (16 + 1 * (w + gap), 560, w, 228);
-        effectsPanel.setBounds   (16 + 2 * (w + gap), 560, w, 228);
-        spatialPanel.setBounds   (16 + 3 * (w + gap), 560, w, 228);
+        chopPanel.setBounds      (16 + 0 * (w + gap), 616, w, 228);
+        transformPanel.setBounds (16 + 1 * (w + gap), 616, w, 228);
+        effectsPanel.setBounds   (16 + 2 * (w + gap), 616, w, 228);
+        spatialPanel.setBounds   (16 + 3 * (w + gap), 616, w, 228);
 
-        statusLabel.setBounds (16, 790, 640, 18);
+        statusLabel.setBounds (16, 846, 640, 18);
     }
 
 private:
@@ -493,6 +506,8 @@ private:
         request.polish    = get (pid::polish) / 100.0f;
         request.air       = get (pid::air) / 100.0f;
         request.engineId  = selectedEngineId();
+        request.morphTo   = static_cast<int> (get (pid::morphTo)) - 1;   // choice 0 is "Off"
+        request.morph     = request.morphTo >= 0 ? get (pid::morphAmt) / 100.0f : 0.0f;
 
         // When the host reports a tempo, the vocal is generated at that tempo and the BPM knob follows it.
         const double hostBpm = proc.getHostBpm();
@@ -634,7 +649,7 @@ private:
     std::atomic<bool> autoDirty { false }, ignoreChanges { false };
     std::atomic<juce::uint32> lastChangeMs { 0 };
     static constexpr const char* autoIds[] = { pid::genre, pid::voiceType, pid::emotion, pid::style, pid::key, pid::scale, pid::octave,
-                                                pid::legato, pid::body, pid::layers, pid::polish, pid::air, pid::bpm };
+                                                pid::legato, pid::body, pid::layers, pid::polish, pid::air, pid::bpm, pid::morphTo, pid::morphAmt };
     juce::String selectedEngineId() const
     {
         const auto i = engineCombo.getSelectedItemIndex();
@@ -671,7 +686,9 @@ private:
     juce::ToggleButton powerButton;
     juce::Label presetLabel, statusLabel;
 
-    NeonCombo voiceCombo, emotionCombo, styleCombo, keyCombo, scaleCombo;
+    NeonCombo voiceCombo, emotionCombo, styleCombo, keyCombo, scaleCombo, morphCombo;
+    juce::Slider morphSlider;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> morphAttachment;
     NeonKnob pitchKnob, formantKnob, bpmKnob, legatoKnob, bodyKnob, layersKnob, octaveKnob, polishKnob, airKnob, mixKnob, outKnob;
     juce::ToggleButton lockButton;
     juce::TextButton exportButton, listenButton;

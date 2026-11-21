@@ -102,6 +102,33 @@ inline VoiceProfile voiceProfile (int index)
     return v;
 }
 
+// A voice that is part way between two voice types. At 0 it is `a`, at 1 it is `b`; numbers blend smoothly,
+// the on/off properties (robotic, voiced) switch at the half-way point.
+inline VoiceProfile morphVoice (int a, int b, float t)
+{
+    auto A = voiceProfile (a);
+
+    if (b < 0 || t <= 0.0f)
+        return A;
+
+    const auto B = voiceProfile (b);
+    t = juce::jlimit (0.0f, 1.0f, t);
+    auto mix = [t] (float x, float y) { return x + (y - x) * t; };
+    VoiceProfile v;
+    v.centreMidi = mix (A.centreMidi, B.centreMidi);
+    v.formantScale = mix (A.formantScale, B.formantScale);
+    v.breath = mix (A.breath, B.breath);
+    v.vibratoCents = mix (A.vibratoCents, B.vibratoCents);
+    v.vibratoHz = mix (A.vibratoHz, B.vibratoHz);
+    v.unison = static_cast<int> (std::lround (mix (static_cast<float> (A.unison), static_cast<float> (B.unison))));
+    v.unisonCents = mix (A.unisonCents, B.unisonCents);
+    v.brightness = mix (A.brightness, B.brightness);
+    v.attackMs = mix (A.attackMs, B.attackMs);
+    v.voiced = t < 0.5f ? A.voiced : B.voiced;
+    v.robotic = t < 0.5f ? A.robotic : B.robotic;
+    return v;
+}
+
 struct EmotionProfile
 {
     float vibratoMul = 1.0f, breathAdd = 0.0f, brightnessMul = 1.0f, formantMul = 1.0f;

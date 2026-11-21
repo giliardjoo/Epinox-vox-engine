@@ -26,6 +26,8 @@ namespace pid
     inline constexpr const char* layers    = "layers";
     inline constexpr const char* key       = "key";
     inline constexpr const char* scale     = "scale";
+    inline constexpr const char* morphTo   = "morphTo";
+    inline constexpr const char* morphAmt  = "morphAmt";
 
     // Vocal Chop Engine
     inline constexpr const char* chopOn     = "chopOn";
@@ -126,6 +128,11 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<APC> (id (pid::key),       "Key",        keyNames(),       9));
     layout.add (std::make_unique<APC> (id (pid::scale),     "Scale",      scaleNames(),     0));
     layout.add (std::make_unique<APC> (id (pid::voiceType), "Voice Type", voiceTypeNames(), 0));
+    {
+        juce::StringArray morphChoices { "Off" };
+        morphChoices.addArray (voiceTypeNames());
+        layout.add (std::make_unique<APC> (id (pid::morphTo), "Morph To", morphChoices, 0));
+    }
     layout.add (std::make_unique<APC> (id (pid::emotion),   "Emotion",    emotionNames(),   0));
     layout.add (std::make_unique<APC> (id (pid::style),     "Style",      styleNames(),     0));
 
@@ -136,6 +143,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     addPct   (pid::polish, "Polish", 50.0f);
     addPct   (pid::air,    "Air",    30.0f);
     addToggle (pid::lockMelody, "Lock Melody", false);
+    addPct   (pid::morphAmt, "Morph Amount", 50.0f);
     addPct   (pid::legato, "Legato", 60.0f);
     addPct   (pid::body,   "Body",   60.0f);
     addPct   (pid::layers, "Layers", 40.0f);

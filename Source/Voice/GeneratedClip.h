@@ -13,6 +13,8 @@ struct GenerationRequest
     float legato = 0.0f, body = 0.0f, layers = 0.0f;   // 0..1: connected notes, low-mid warmth, doubled voices
     float polish = 0.0f, air = 0.0f;                   // 0..1: compression + de-essing, high-frequency shelf
     juce::String engineId = "builtin";   // voice engine: "builtin" or the id of a voice pack
+    int morphTo = -1;                    // second voice type to blend towards, -1 for none
+    float morph = 0.0f;                  // 0..1, how far towards morphTo
     int octave = 0;                  // -2..+2 octaves
     int melodyVariation = -1;        // -1: same as variation; otherwise the melody seed (Lock Melody)
     int key = 9;                     // 0 = C ... 11 = B (default A)

@@ -176,3 +176,9 @@ the ONNX runtime that executes them is not included yet, so a selected pack fall
 - **LISTEN.** The plugin keeps the last 8 seconds of the audio coming into it. Press LISTEN next to the Key menu and it detects the key
   (Krumhansl-Kessler profiles over a pitch-class profile) and sets Key and Scale. Play the bass or chords through the plugin first.
 - Polish now measures loudness with a short-term RMS detector instead of peaks.
+
+## Voice morph (v0.12)
+
+A new row under the waveform holds ENGINE, MORPH TO and the morph amount. MORPH TO picks a second voice type (Off by default) and the slider
+moves the voice from VOICE towards it: pitch range, formants, breathiness, vibrato, brightness, layering and attack blend smoothly; Robotic
+and Whisper switch on past the half-way point. The window is 868 px tall now.
