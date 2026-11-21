@@ -72,7 +72,7 @@ private:
     public:
         Synth (const Composition& c, const GenerationRequest& r, const std::function<bool()>& cancel)
             : comp (c), req (r), cancelled (cancel),
-              V (morphVoice (r.voiceType, r.morphTo, r.morph)), E (emotionProfile (r.emotion)), S (styleProfile (r.style)),
+              V (r.custom != nullptr ? r.custom->profile : morphVoice (r.voiceType, r.morphTo, r.morph)), E (emotionProfile (r.emotion)), S (styleProfile (r.style)),
               sr (r.sampleRate), spb (60.0 / r.bpm), rng (0x5eed1234 + r.variation)
         {
             voiced = V.voiced && ! S.whisper;
@@ -134,6 +134,19 @@ private:
         static constexpr double breathBw1 = 160.0, breathBw2 = 240.0, breathBw3 = 320.0;
 
         //----------------------------------------------------------------------
+        // The vowel's formants: the average table, or the measured ones when a voice profile is in use
+        // (divided by the profile's own scale, which `scaled` puts back).
+        Formants vowelF (char v) const
+        {
+            if (req.custom == nullptr)
+                return vowelFormants (v);
+
+            const int i = v == 'a' ? 0 : v == 'e' ? 1 : v == 'i' ? 2 : v == 'o' ? 3 : 4;
+            const auto f = req.custom->vowels[static_cast<size_t> (i)];
+            const float k = 1.0f / juce::jmax (0.3f, V.formantScale);
+            return { f.f1 * k, f.f2 * k, f.f3 * k };
+        }
+
         Formants scaled (Formants f) const { return { f.f1 * fScale, f.f2 * fScale, f.f3 * fScale }; }
 
         void addSeg (Seg s) { segs.push_back (s); }
@@ -151,7 +164,7 @@ private:
                 const double t0 = std::max (0.0, note.beat * spb + (flat ? 0.0 : (rng.nextFloat() - 0.5f) * 0.008));
                 const double dur = note.beats * spb;
                 const double voicedEnd = t0 + dur * (legato >= 0.97f ? 1.0 : legato);
-                auto vf = scaled (vowelFormants (syl.vowel));
+                auto vf = scaled (vowelF (syl.vowel));
 
                 // No two sung syllables are identical: small formant and tuning differences per note.
                 float noteMidi = note.midi;
@@ -384,7 +397,7 @@ private:
             Biquad fric, br1, br2, br3;
             std::array<float, maxHarm + 1> phaseTmp {};
 
-            Formants fCur = scaled (vowelFormants ('a'));
+            Formants fCur = scaled (vowelF ('a'));
             float voiceA = 0.0f, noiseA = 0.0f, breathA = 0.0f, noiseHz = 4000.0f, noiseBw = 2000.0f;
             float pitchS = 60.0f, pitchOff = 0.0f, tNote = 0.0f;
             double vibPhase = 0.0;

@@ -1,7 +1,9 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
+#include <memory>
 #include <vector>
+#include "VoiceTables.h"
 
 namespace epinox
 {
@@ -12,6 +14,7 @@ struct GenerationRequest
     int genre = 0, voiceType = 0, emotion = 0, style = 0;
     float legato = 0.0f, body = 0.0f, layers = 0.0f;   // 0..1: connected notes, low-mid warmth, doubled voices
     float polish = 0.0f, air = 0.0f;                   // 0..1: compression + de-essing, high-frequency shelf
+    std::shared_ptr<const voice::CustomVoice> custom;   // set when a voice profile pack is the engine
     juce::String engineId = "builtin";   // voice engine: "builtin" or the id of a voice pack
     int morphTo = -1;                    // second voice type to blend towards, -1 for none
     float morph = 0.0f;                  // 0..1, how far towards morphTo

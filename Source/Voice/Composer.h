@@ -34,12 +34,13 @@ public:
 
     static Composition compose (std::vector<Syllable> syllables, int genre, int style, int emotion, int voiceType,
                                 juce::int64 seed, int key = 9, int scaleChoice = 0, float legatoAmt = 0.0f, int octave = 0,
-                                int morphTo = -1, float morph = 0.0f)
+                                int morphTo = -1, float morph = 0.0f,
+                                const CustomVoice* custom = nullptr)
     {
         juce::Random rng (seed);
         const auto G = genreProfile (genre);
         const auto S = styleProfile (style);
-        const auto V = morphVoice (voiceType, morphTo, morph);
+        const auto V = custom != nullptr ? custom->profile : morphVoice (voiceType, morphTo, morph);
         const auto E = emotionProfile (emotion);
 
         Composition c;

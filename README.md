@@ -182,3 +182,15 @@ the ONNX runtime that executes them is not included yet, so a selected pack fall
 A new row under the waveform holds ENGINE, MORPH TO and the morph amount. MORPH TO picks a second voice type (Off by default) and the slider
 moves the voice from VOICE towards it: pitch range, formants, breathiness, vibrato, brightness, layering and attack blend smoothly; Robotic
 and Whisper switch on past the half-way point. The window is 868 px tall now.
+
+## Your own voice: voice profiles (v0.13)
+
+A voice pack of type `profile` makes the built-in synthesiser sing with a real person's vocal tract: the five measured vowel formants,
+the person's centre note, breathiness and vibrato. It appears in the ENGINE menu like any pack.
+
+1. Record the vowel test (sustained A E I O U at a low, a middle and a high note, 3 s each, with pauses).
+2. `python3 Tools/analyze_voice.py recording.wav --id my-voice --name "My Voice"` writes `my-voice/voicepack.json` and prints what it measured.
+   (`Tools/make_test_recording.py` makes a synthetic recording with known formants to check the script: it recovers them within about 6 %.)
+3. Copy the folder to `%APPDATA%\EPINOX\VOX ENGINE\Voices\` (macOS: `~/Library/Application Support/EPINOX/VOX ENGINE/Voices/`) and pick it in ENGINE.
+
+This keeps the synthesiser's sound character; it does not replay recordings. The voice-library and neural paths are separate steps.

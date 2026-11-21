@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
+#include <array>
 #include <vector>
 
 namespace epinox::voice
@@ -71,6 +72,15 @@ struct VoiceProfile
     bool voiced = true;
     bool robotic = false;        // no vibrato / glide, flat spectrum
     float attackMs = 15.0f;
+};
+
+// A voice measured from a real person (see voice packs of type "profile"): its own range, breathiness, vibrato and
+// the formants of the five vowels, so the synthesiser sings with that person's vocal tract.
+struct CustomVoice
+{
+    VoiceProfile profile;
+    std::array<Formants, 5> vowels {};   // a e i o u, in Hz, as measured
+    juce::String name;
 };
 
 // Order matches Parameters.h voiceTypeNames()

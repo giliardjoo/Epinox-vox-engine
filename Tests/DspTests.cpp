@@ -1106,6 +1106,55 @@ void testMorph()
     check (a && b && diff > 1.0, "a morphed voice renders differently");
 }
 
+void testVoiceProfilePack()
+{
+    using namespace epinox;
+    std::printf ("\n[Voice profile pack]\n");
+    auto root = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("epinox_profile_test");
+    root.deleteRecursively();
+    auto mk = [&] (const char* dir, const juce::String& text)
+    {
+        auto d = root.getChildFile (dir);
+        d.createDirectory();
+        d.getChildFile ("voicepack.json").replaceWithText (text);
+    };
+    const juce::String vowels = R"("vowels":{"a":[850,1300,2800],"e":[600,2100,2900],"i":[330,2500,3300],"o":[620,950,2700],"u":[350,1000,2600]})";
+    mk ("mine", R"({"id":"mine","name":"My Voice","type":"profile","license":"Own recordings","voice":{"centreMidi":45,"breath":0.1,"vibratoHz":5.5,"vibratoCents":15,)" + vowels + "}}");
+    mk ("badformant", R"({"id":"bad","name":"Bad","type":"profile","license":"x","voice":{"centreMidi":50,"vowels":{"a":[850,1300,2800],"e":[600,2100,2900],"i":[3000,2500,3300],"o":[620,950,2700],"u":[350,1000,2600]}}})");
+    mk ("nocentre", R"({"id":"nc","name":"NC","type":"profile","license":"x","voice":{)" + vowels + "}}");
+    mk ("novoice", R"({"id":"nv","name":"NV","type":"profile","license":"x"})");
+
+    const auto packs = engines::scanPacks (root);
+    int valid = 0;
+    for (auto& p : packs) valid += p.valid ? 1 : 0;
+    check (packs.size() == 4 && valid == 1, fmt ("only the complete profile is valid (%.0f of 4)", (double) valid));
+    check (engines::listEngines (root).size() == 2, "the valid profile shows in the engine list");
+
+    GenerationRequest r;
+    r.phrase = "never let me go"; r.sampleRate = 44100.0; r.bpm = 120; r.engineId = "mine";
+    auto mineR = engines::render (r, [] { return false; }, root);
+    r.engineId = "builtin";
+    auto plainR = engines::render (r, [] { return false; }, root);
+    check (mineR.clip && plainR.clip && mineR.note.contains ("My Voice"), "a profile renders and says whose voice it is");
+
+    double diff = 0.0;
+    for (size_t i = 0; mineR.clip && plainR.clip && i < std::min (mineR.clip->left.size(), plainR.clip->left.size()); ++i)
+        diff += std::abs (mineR.clip->left[i] - plainR.clip->left[i]);
+    check (diff > 1.0, "the profile voice sounds different from the built-in one");
+
+    // The melody follows the profile's range (centre note 45 against the female default 67).
+    auto pack = engines::scanPacks (root);
+    std::shared_ptr<const voice::CustomVoice> cv;
+    for (auto& p : pack) if (p.valid) cv = p.custom;
+    auto low = voice::Composer::compose (voice::PhraseParser::parse (r.phrase), 0, 0, 0, 0, 7, 9, 1, 0.0f, 0, -1, 0.0f, cv.get());
+    auto high = voice::Composer::compose (voice::PhraseParser::parse (r.phrase), 0, 0, 0, 0, 7, 9, 1, 0.0f, 0);
+    double lm = 0, hm = 0;
+    for (auto& n : low.notes) lm += n.midi;
+    for (auto& n : high.notes) hm += n.midi;
+    check (cv && lm / low.notes.size() < hm / high.notes.size() - 8.0, "the melody sits in the profile's own range");
+    root.deleteRecursively();
+}
+
 } // namespace
 
 int main()
@@ -1121,6 +1170,7 @@ int main()
     testMelodySearch();
     testKeyDetector();
     testMorph();
+    testVoiceProfilePack();
 
     std::printf ("\n%s (%d failed)\n", failures == 0 ? "ALL CHECKS PASSED" : "SOME CHECKS FAILED", failures);
     return failures;
