@@ -50,6 +50,16 @@ namespace pid
     inline constexpr const char* fxDistort = "fxDistort";
     inline constexpr const char* fxWidth   = "fxWidth";
 
+    // LFO
+    inline constexpr const char* lfoOn      = "lfoOn";
+    inline constexpr const char* lfoShape   = "lfoShape";
+    inline constexpr const char* lfoSync    = "lfoSync";
+    inline constexpr const char* lfoRate    = "lfoRate";
+    inline constexpr const char* lfoPitch   = "lfoPitch";
+    inline constexpr const char* lfoFormant = "lfoFormant";
+    inline constexpr const char* lfoFilter  = "lfoFilter";
+    inline constexpr const char* lfoVolume  = "lfoVolume";
+
     // Spatial
     inline constexpr const char* spOn      = "spOn";
     inline constexpr const char* spSize    = "spSize";
@@ -62,6 +72,17 @@ inline juce::StringArray genreNames()
 {
     return { "Melodic Techno", "Progressive House", "Afro House", "Peak Time Techno", "Hard Techno",
              "Hypnotic Techno", "Trance", "Deep House", "Tech House", "Ambient" };
+}
+
+inline juce::StringArray lfoShapeNames()
+{
+    return { "Sine", "Triangle", "Square", "Saw", "Random" };
+}
+
+// Index 0 = free (uses Rate); the others follow the host tempo. Keep in step with LfoEngine::syncBeats().
+inline juce::StringArray lfoSyncNames()
+{
+    return { "Free", "4 Bars", "2 Bars", "1 Bar", "1/2", "1/4", "1/8", "1/16" };
 }
 
 inline juce::StringArray keyNames()
@@ -171,6 +192,17 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     addPct    (pid::spDensity, "Spatial Density", 50.0f);
     addPct    (pid::spDucking, "Spatial Ducking",  0.0f);
     addPct    (pid::spMix,     "Spatial Mix",     30.0f);
+
+    addToggle (pid::lfoOn, "LFO On", false);
+    layout.add (std::make_unique<APC> (id (pid::lfoShape), "LFO Shape", lfoShapeNames(), 0));
+    layout.add (std::make_unique<APC> (id (pid::lfoSync),  "LFO Sync",  lfoSyncNames(),  0));
+    layout.add (std::make_unique<APF> (id (pid::lfoRate), "LFO Rate",
+                                       juce::NormalisableRange<float> (0.05f, 20.0f, 0.01f, 0.4f), 1.0f,
+                                       juce::AudioParameterFloatAttributes().withLabel ("Hz")));
+    addPct (pid::lfoPitch,   "LFO Pitch",   0.0f);
+    addPct (pid::lfoFormant, "LFO Formant", 0.0f);
+    addPct (pid::lfoFilter,  "LFO Filter",  0.0f);
+    addPct (pid::lfoVolume,  "LFO Volume",  0.0f);
 
     return layout;
 }

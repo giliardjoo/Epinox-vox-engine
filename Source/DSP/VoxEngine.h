@@ -4,6 +4,7 @@
 #include <vector>
 #include "ChopEngine.h"
 #include "EffectsEngine.h"
+#include "LfoEngine.h"
 #include "SpatialEngine.h"
 #include "TransformEngine.h"
 
@@ -41,9 +42,11 @@ struct EngineParams
 
     bool spOn = true;
     float spSize = 0.5f, spDensity = 0.5f, spDucking = 0.0f, spMix = 0.0f;
+
+    LfoParams lfo;
 };
 
-// Signal flow: input (+ generated vocal) -> Vocal Chop -> Transform -> Effects -> Spatial -> Mix (against the aligned dry signal).
+// Signal flow: input (+ generated vocal) -> Vocal Chop -> Transform (+ LFO on pitch/formant, then LFO filter and level) -> Effects -> Spatial -> Mix (against the aligned dry signal).
 class VoxEngine
 {
 public:
@@ -54,6 +57,8 @@ public:
         maxBlock = juce::jmax (16, maxBlockSize);
         chop.prepare (sampleRate);
         transform.prepare (sampleRate);
+        lfo.prepare (sampleRate);
+        lfoBuf.assign (static_cast<size_t> (maxBlock), 0.0f);
         effects.prepare (sampleRate);
         spatial.prepare (sampleRate);
         dryDelayL.prepare (latencySamples);
@@ -134,9 +139,31 @@ private:
 
         chop.process (l, r, n, p.chopOn, p.chopRate, p.chopSteps, p.chopSmooth, p.chopMix);
 
-        const float pitchTotal = p.pitch + (p.trOn ? p.trPitch : 0.0f);
-        const float formantTotal = p.formant + (p.trOn ? p.trFormant : 0.0f);
-        transform.process (l, r, n, pitchTotal, formantTotal, p.trOn, p.trRobot, p.trGrain);
+        float pitchTotal = p.pitch + (p.trOn ? p.trPitch : 0.0f);
+        float formantTotal = p.formant + (p.trOn ? p.trFormant : 0.0f);
+
+        // One LFO value per sample; pitch and formant follow its average over the chunk.
+        const bool lfoOn = p.lfo.active();
+        bool forceShift = false;
+
+        if (lfoOn)
+        {
+            lfo.generate (n, p.lfo, lfoBuf.data());
+            float mean = 0.0f;
+
+            for (int i = 0; i < n; ++i)
+                mean += lfoBuf[static_cast<size_t> (i)];
+
+            mean /= static_cast<float> (n);
+            pitchTotal += mean * p.lfo.pitch * LfoEngine::maxPitchSt;
+            formantTotal += mean * p.lfo.formant * LfoEngine::maxFormantSt;
+            forceShift = p.lfo.pitch > 0.0f || p.lfo.formant > 0.0f;
+        }
+
+        transform.process (l, r, n, pitchTotal, formantTotal, p.trOn, p.trRobot, p.trGrain, forceShift);
+
+        if (lfoOn)
+            lfo.applyAudio (l, r, n, p.lfo, lfoBuf.data());
 
         effects.process (l, r, n, p.fxOn, p.fxReverb, p.fxDelay, p.fxDistort, p.fxWidth, p.bpm);
         spatial.process (l, r, n, p.spOn, p.spSize, p.spDensity, p.spDucking, p.spMix);
@@ -160,6 +187,8 @@ private:
     bool firstCall = true;
     ChopEngine chop;
     TransformEngine transform;
+    LfoEngine lfo;
+    std::vector<float> lfoBuf;
     EffectsEngine effects;
     SpatialEngine spatial;
     FixedDelay dryDelayL, dryDelayR;

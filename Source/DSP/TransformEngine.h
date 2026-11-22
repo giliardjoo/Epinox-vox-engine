@@ -150,12 +150,12 @@ public:
         carrierPhase = 0.0f;
     }
 
-    void process (float* l, float* r, int n, float pitchSt, float formantSt, bool on, float robot01, float grain01)
+    void process (float* l, float* r, int n, float pitchSt, float formantSt, bool on, float robot01, float grain01, bool forceShift = false)
     {
         voiceL.setShift (pitchSt, formantSt);
         voiceR.setShift (pitchSt, formantSt);
 
-        const bool shifting = std::abs (pitchSt) > 0.01f || std::abs (formantSt) > 0.01f;
+        const bool shifting = forceShift || std::abs (pitchSt) > 0.01f || std::abs (formantSt) > 0.01f;
         useVoice.setTargetValue (shifting ? 1.0f : 0.0f);
         robotAmount.setTargetValue (on ? robot01 : 0.0f);
         grainAmount.setTargetValue (on ? grain01 : 0.0f);

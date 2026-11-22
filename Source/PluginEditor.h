@@ -18,7 +18,7 @@ public:
 
 private:
     static constexpr int designWidth = 1100;
-    static constexpr int designHeight = 868;
+    static constexpr int designHeight = 998;
 
     epinox::ui::NeonLookAndFeel laf;   // declared before content: destroyed after it
     std::unique_ptr<VoxContent> content;

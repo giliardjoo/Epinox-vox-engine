@@ -105,7 +105,7 @@ namespace
 }
 
 //==============================================================================
-// All controls live in this 1100 x 868 design space; the editor scales it to the window.
+// All controls live in this 1100 x 998 design space; the editor scales it to the window.
 class VoxContent : public juce::Component, private juce::Timer, private juce::AudioProcessorValueTreeState::Listener
 {
 public:
@@ -153,6 +153,7 @@ public:
                           { pid::spDensity, "DENSITY", " %", 0 },
                           { pid::spDucking, "DUCKING", " %", 0 },
                           { pid::spMix,     "MIX",     " %", 0 } }),
+          lfoPanel (p.apvts),
           powerAttachment (p.apvts, pid::power, powerButton)
     {
         setSize (1100, 740);
@@ -245,7 +246,7 @@ public:
                  &genreList, &engineCombo, &phrase, &generateButton,
                  &voiceCombo, &emotionCombo, &styleCombo, &keyCombo, &listenButton, &scaleCombo, &morphCombo, &morphSlider, &pitchKnob, &formantKnob, &bpmKnob, &legatoKnob, &bodyKnob, &layersKnob, &octaveKnob, &polishKnob, &airKnob, &lockButton, &exportButton, &dragHandle,
                  &mixKnob, &outKnob, &waveform, &meterIn, &meterOut,
-                 &chopPanel, &transformPanel, &effectsPanel, &spatialPanel,
+                 &chopPanel, &transformPanel, &effectsPanel, &spatialPanel, &lfoPanel,
                  &prevButton, &nextButton, &saveButton, &openButton, &powerButton,
                  &presetLabel, &statusLabel })
             addAndMakeVisible (c);
@@ -324,7 +325,7 @@ public:
         g.setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::bold)).withExtraKerningFactor (0.18f));
         g.setColour (textDim);
         g.drawText (juce::String ("EPINOX  |  ONE PHRASE. INFINITE POSSIBILITIES.  |  V") + JucePlugin_VersionString,
-                    juce::Rectangle<float> (area.getRight() - 560.0f, 846.0f, 544.0f, 18.0f),
+                    juce::Rectangle<float> (area.getRight() - 560.0f, 976.0f, 544.0f, 18.0f),
                     juce::Justification::centredRight);
     }
 
@@ -381,8 +382,9 @@ public:
         transformPanel.setBounds (16 + 1 * (w + gap), 616, w, 228);
         effectsPanel.setBounds   (16 + 2 * (w + gap), 616, w, 228);
         spatialPanel.setBounds   (16 + 3 * (w + gap), 616, w, 228);
+        lfoPanel.setBounds       (16, 852, 1068, 120);
 
-        statusLabel.setBounds (16, 846, 640, 18);
+        statusLabel.setBounds (16, 976, 640, 18);
     }
 
 private:
@@ -416,6 +418,7 @@ private:
         transformPanel.refresh();
         effectsPanel.refresh();
         spatialPanel.refresh();
+        lfoPanel.refresh();
 
         generateButton.setEnabled (! proc.isGenerating());
 
@@ -710,6 +713,7 @@ private:
     WaveformView waveform;
     MeterBar meterIn, meterOut;
     ModulePanel chopPanel, transformPanel, effectsPanel, spatialPanel;
+    LfoPanel lfoPanel;
 
     juce::AudioProcessorValueTreeState::ButtonAttachment powerAttachment;
     std::unique_ptr<juce::FileChooser> chooser;

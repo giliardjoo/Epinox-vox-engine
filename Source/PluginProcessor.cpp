@@ -103,6 +103,16 @@ epinox::dsp::EngineParams VoxProcessor::readParams() const
     p.spDensity = v (pid::spDensity) / 100.0f;
     p.spDucking = v (pid::spDucking) / 100.0f;
     p.spMix = v (pid::spMix) / 100.0f;
+
+    p.lfo.on = v (pid::lfoOn) > 0.5f;
+    p.lfo.shape = static_cast<int> (v (pid::lfoShape) + 0.5f);
+    p.lfo.sync = static_cast<int> (v (pid::lfoSync) + 0.5f);
+    p.lfo.rateHz = v (pid::lfoRate);
+    p.lfo.bpm = p.bpm;
+    p.lfo.pitch = v (pid::lfoPitch) / 100.0f;
+    p.lfo.formant = v (pid::lfoFormant) / 100.0f;
+    p.lfo.filter = v (pid::lfoFilter) / 100.0f;
+    p.lfo.volume = v (pid::lfoVolume) / 100.0f;
     return p;
 }
 

@@ -1239,6 +1239,88 @@ void testReverbQuality()
     check (allFinite (l, 20.0f) && rms (l, n / 2, n) < 3.0 * 0.3, fmt ("low tone through the room stays under control (%.3f)", rms (l, n / 2, n)));
 }
 
+void testLfo()
+{
+    using namespace epinox;
+    std::printf ("\n[LFO]\n");
+    const int n = static_cast<int> (sr * 4.0);
+
+    auto run = [&] (const dsp::LfoParams& lp, const std::vector<float>& in)
+    {
+        dsp::VoxEngine eng;
+        eng.prepare (sr, 512);
+        dsp::EngineParams p;
+        p.mix = 1.0f; p.trOn = true; p.fxOn = false; p.spOn = false; p.chopOn = false;
+        p.lfo = lp;
+        juce::AudioBuffer<float> b (2, n);
+        for (int i = 0; i < n; ++i) { b.setSample (0, i, in[static_cast<size_t> (i)]); b.setSample (1, i, in[static_cast<size_t> (i)]); }
+        for (int s0 = 0; s0 < n; s0 += 512)
+        {
+            juce::AudioBuffer<float> blk (b.getArrayOfWritePointers(), 2, s0, juce::jmin (512, n - s0));
+            eng.process (blk, p);
+        }
+        std::vector<float> o (static_cast<size_t> (n));
+        for (int i = 0; i < n; ++i) o[static_cast<size_t> (i)] = b.getSample (0, i);
+        return o;
+    };
+
+    const auto tone = sine (440.0, 0.4, n);
+
+    // Off / zero depth: bit for bit the same as no LFO.
+    dsp::LfoParams off;
+    dsp::LfoParams zero; zero.on = true; zero.rateHz = 2.0f;
+    check (run (off, tone) == run (zero, tone), "LFO with every depth at 0 changes nothing");
+
+    // Volume LFO: the level swings at the LFO rate, between silent and full.
+    dsp::LfoParams vol; vol.on = true; vol.shape = 0; vol.rateHz = 2.0f; vol.volume = 1.0f;
+    const auto v = run (vol, tone);
+    double lo = 1.0, hi = 0.0;
+    for (int i = static_cast<int> (sr * 1.0); i + 2205 < n; i += 2205)
+    {
+        const double r2 = rms (v, i, i + 2205);
+        lo = std::min (lo, r2); hi = std::max (hi, r2);
+    }
+    check (allFinite (v, 2.0f) && hi > 0.2 && lo < 0.05, fmt ("volume LFO swings the level (%.3f .. %.3f)", lo, hi));
+
+    // Filter LFO on white noise: the brightness moves.
+    std::vector<float> noise (static_cast<size_t> (n));
+    juce::Random rnd (7);
+    for (auto& x : noise) x = (rnd.nextFloat() - 0.5f) * 0.6f;
+    dsp::LfoParams flt; flt.on = true; flt.shape = 1; flt.rateHz = 1.0f; flt.filter = 1.0f;
+    const auto f = run (flt, noise);
+    auto bright = [&] (int a, int b2)
+    {
+        double d = 0.0, e = 0.0;
+        for (int i = a + 1; i < b2; ++i) { const double df = f[static_cast<size_t> (i)] - f[static_cast<size_t> (i - 1)]; d += df * df; e += f[static_cast<size_t> (i)] * f[static_cast<size_t> (i)]; }
+        return e > 0.0 ? d / e : 0.0;
+    };
+    const int q = static_cast<int> (sr * 0.25);
+    double bmin = 1e9, bmax = 0.0;
+    for (int i = static_cast<int> (sr); i + q < n; i += q) { const double x = bright (i, i + q); bmin = std::min (bmin, x); bmax = std::max (bmax, x); }
+    check (allFinite (f, 2.0f) && bmax > 2.0 * bmin, fmt ("filter LFO sweeps the brightness (%.3f .. %.3f)", bmin, bmax));
+
+    // Pitch LFO: a held tone gets frequency modulation, so the zero-crossing rate moves around.
+    dsp::LfoParams pit; pit.on = true; pit.shape = 0; pit.rateHz = 1.0f; pit.pitch = 1.0f;
+    const auto pv = run (pit, tone);
+    check (allFinite (pv, 2.0f) && rms (pv, static_cast<int> (sr * 2), n) > 0.05, "pitch LFO keeps a clean, finite signal");
+
+    // Sync: 1/4 note at 120 BPM = 2 Hz.
+    dsp::LfoParams sy; sy.sync = 5; sy.bpm = 120.0f;
+    check (std::abs (dsp::LfoEngine::rateFor (sy) - 2.0f) < 1e-4f, "sync 1/4 at 120 BPM runs at 2 Hz");
+
+    // Every shape stays inside -1..1 and the random one moves.
+    for (int sh = 0; sh < 5; ++sh)
+    {
+        dsp::LfoEngine e; e.prepare (sr);
+        dsp::LfoParams lp; lp.on = true; lp.shape = sh; lp.rateHz = 3.0f;
+        std::vector<float> buf (static_cast<size_t> (n));
+        e.generate (n, lp, buf.data());
+        float mn = 9, mx = -9;
+        for (auto x : buf) { mn = std::min (mn, x); mx = std::max (mx, x); }
+        check (mn >= -1.001f && mx <= 1.001f && mx - mn > 0.5f, fmt ("LFO shape %.0f stays in range and moves (%.2f .. %.2f)", static_cast<double> (sh), static_cast<double> (mn), static_cast<double> (mx)));
+    }
+}
+
 } // namespace
 
 int main()
@@ -1257,6 +1339,7 @@ int main()
     testVoiceProfilePack();
     testDynamics();
     testReverbQuality();
+    testLfo();
 
     std::printf ("\n%s (%d failed)\n", failures == 0 ? "ALL CHECKS PASSED" : "SOME CHECKS FAILED", failures);
     return failures;

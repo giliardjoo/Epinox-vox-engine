@@ -183,6 +183,91 @@ private:
 };
 
 //==============================================================================
+// LFO strip: on/off switch, shape, sync, rate and one depth knob for each destination.
+class LfoPanel : public juce::Component
+{
+public:
+    explicit LfoPanel (juce::AudioProcessorValueTreeState& apvts)
+        : shape (apvts, epinox::pid::lfoShape, "SHAPE"),
+          sync (apvts, epinox::pid::lfoSync, "SYNC"),
+          rate (apvts, epinox::pid::lfoRate, "RATE", " Hz", 2),
+          pitch (apvts, epinox::pid::lfoPitch, "> PITCH", " %", 0),
+          formant (apvts, epinox::pid::lfoFormant, "> FORMANT", " %", 0),
+          filter (apvts, epinox::pid::lfoFilter, "> FILTER", " %", 0),
+          volume (apvts, epinox::pid::lfoVolume, "> VOLUME", " %", 0)
+    {
+        addAndMakeVisible (toggle);
+        toggleAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, epinox::pid::lfoOn, toggle);
+
+        for (auto* c : std::initializer_list<juce::Component*> { &shape, &sync, &rate, &pitch, &formant, &filter, &volume })
+            addAndMakeVisible (c);
+
+        refresh();
+    }
+
+    void refresh()
+    {
+        const bool on = toggle.getToggleState();
+
+        if (on != lastOn || ! initialised)
+        {
+            lastOn = on;
+            initialised = true;
+
+            for (auto* c : std::initializer_list<juce::Component*> { &shape, &sync, &rate, &pitch, &formant, &filter, &volume })
+                c->setAlpha (on ? 1.0f : 0.35f);
+
+            repaint();
+        }
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto b = getLocalBounds().toFloat().reduced (2.0f);
+        const bool on = toggle.getToggleState();
+
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff0b1713), b.getX(), b.getY(),
+                                                 juce::Colour (0xff050a08), b.getX(), b.getBottom(), false));
+        g.fillRoundedRectangle (b, 12.0f);
+        glowRoundedRect (g, b, 12.0f, on ? neon : neonDim, on ? 1.0f : 0.3f);
+        g.setColour (on ? neon.withAlpha (0.7f) : neonDim.withAlpha (0.6f));
+        g.drawRoundedRectangle (b, 12.0f, 1.2f);
+
+        g.setFont (juce::Font (juce::FontOptions (13.0f, juce::Font::bold)).withExtraKerningFactor (0.12f));
+        g.setColour (on ? text : textDim);
+        g.drawText ("LFO", juce::Rectangle<float> (b.getX() + 16.0f, b.getY() + 10.0f, 60.0f, 22.0f), juce::Justification::centredLeft);
+
+        g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::plain)));
+        g.setColour (textDim);
+        g.drawFittedText ("One LFO moves pitch, formant, a low-pass filter and the level. Set a depth to 0 to leave that one alone.",
+                          juce::Rectangle<int> (static_cast<int> (b.getX()) + 16, static_cast<int> (b.getY()) + 40, 130, 62),
+                          juce::Justification::topLeft, 5);
+    }
+
+    void resized() override
+    {
+        auto b = getLocalBounds().reduced (6);
+        auto left = b.removeFromLeft (160);
+        toggle.setBounds (left.removeFromTop (34).removeFromRight (48).reduced (4));
+
+        auto combos = b.removeFromLeft (130);
+        shape.setBounds (combos.removeFromTop (b.getHeight() / 2).reduced (4, 4));
+        sync.setBounds (combos.reduced (4, 4));
+
+        const int cw = b.getWidth() / 5;
+        for (auto* k : std::initializer_list<juce::Component*> { &rate, &pitch, &formant, &filter, &volume })
+            k->setBounds (b.removeFromLeft (cw));
+    }
+
+private:
+    juce::ToggleButton toggle;
+    NeonCombo shape, sync;
+    NeonKnob rate, pitch, formant, filter, volume;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> toggleAttachment;
+    bool lastOn = true, initialised = false;
+};
+
+//==============================================================================
 // Vertical list of genres, bound to the choice parameter.
 class GenreList : public juce::Component
 {

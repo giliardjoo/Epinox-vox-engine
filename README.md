@@ -41,7 +41,7 @@ automatically. Without it the header shows a plain text wordmark.
 | 2 | Audio engine: Vocal Chop, Transform, Effects, Spatial, Mix | done, validated by numerical tests |
 | 3 | Vocal generation (GENERATE), offline synthesis | done, validated by numerical tests |
 | 4 | Musical intelligence: Key and Scale, chord-tone melodies, tonic resolution | done, validated by numerical tests |
-| 5 | 485 factory presets that generate their own vocal | done |
+| 5 | 585 factory presets that generate their own vocal | done |
 | 6 | Commercial parameter document, licensing | not started |
 
 What is real today:
@@ -121,7 +121,7 @@ Details worth knowing:
 
 ## Factory presets (Phase 5)
 
-485 presets are built in, grouped by genre in the picker (`Source/FactoryPresets.h`). Click the preset name in the header to pick one from the genre menus, or use the
+585 presets are built in, grouped by genre in the picker (`Source/FactoryPresets.h`). Click the preset name in the header to pick one from the genre menus, or use the
 arrows (they stay inside the genre selected in the list and wrap around at its ends; your own saved presets are stepped through in their own list). Loading any preset (factory or file) generates its vocal automatically; Enter in the phrase field also generates. A factory preset resets every control to its default, applies its
 settings and generates its vocal straight away. Power is never changed by a preset.
 
@@ -204,3 +204,14 @@ Robotic voices stay flat. The same phrase and variation always give the same dyn
 ## Smoother reverbs (0.16)
 
 The Spatial room and the Effects reverb now use a feedback delay network (8 modulated delay lines, Hadamard mixing, input diffusion) instead of parallel comb filters. The tail is denser and no longer rings on pitched material; low frequencies are kept out of the tail so it cannot boom. Overall loudness and decay times are close to the previous versions, so existing presets still behave similarly (the longest Spatial room is now about 3 s).
+
+## LFO (0.17)
+
+A new strip at the bottom of the window holds one LFO that moves four things at once. Each destination has its own depth knob (0 leaves it alone):
+
+- **PITCH** – vibrato, up to ±2 semitones.
+- **FORMANT** – the vowel colour breathes, up to ±4 semitones.
+- **FILTER** – a low-pass sweeps between 240 Hz and 12 kHz.
+- **VOLUME** – tremolo, down to full silence.
+
+Shapes: sine, triangle, square, saw and random (smoothed sample & hold). **SYNC** locks the cycle to the BPM from 4 bars down to 1/16; Free uses the RATE knob (0.05–20 Hz). The LFO sits after Transform and before Effects and Spatial, so reverb and delay tails are not modulated, and it works on the sound already generated: moving it never regenerates the melody. 100 of the factory presets use it.
