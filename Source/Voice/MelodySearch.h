@@ -134,6 +134,37 @@ public:
         c = std::move (best);
     }
 
+    // Phrase dynamics: a gentle swell across the phrase, louder on higher notes, and a small different level for each
+    // word, so the line breathes instead of every syllable having the same weight. Never adds silence. Deterministic.
+    static void shapeDynamics (Composition& c, juce::int64 seed, float centreMidi, float amount = 1.0f)
+    {
+        if (c.notes.empty() || amount <= 0.0f)
+            return;
+
+        const double total = std::max (1.0, c.loopBeats);
+        std::vector<float> wordGain;
+        juce::Random rng (seed);
+        int word = -1;
+
+        for (size_t i = 0; i < c.notes.size(); ++i)
+        {
+            auto& n = c.notes[i];
+            const auto& syl = c.syllables[static_cast<size_t> (n.syllable)];
+
+            if (syl.wordStart || word < 0)
+            {
+                ++word;
+                wordGain.push_back (1.0f + (rng.nextFloat() - 0.5f) * 0.18f);   // about +-0.75 dB
+            }
+
+            const double pos = std::fmod (n.beat, total) / total;
+            const float swell = 0.94f + 0.12f * static_cast<float> (std::sin (juce::MathConstants<double>::pi * pos));
+            const float register_ = 1.0f + juce::jlimit (-0.08f, 0.1f, (n.midi - centreMidi) * 0.012f);
+            const float g = swell * register_ * wordGain[static_cast<size_t> (word)];
+            n.accent = juce::jlimit (0.6f, 1.5f, n.accent * (1.0f + (g - 1.0f) * amount));
+        }
+    }
+
 private:
     static bool inScale (int midi, const Context& ctx)
     {

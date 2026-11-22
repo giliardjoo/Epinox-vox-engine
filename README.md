@@ -194,3 +194,9 @@ the person's centre note, breathiness and vibrato. It appears in the ENGINE menu
 3. Copy the folder to `%APPDATA%\EPINOX\VOX ENGINE\Voices\` (macOS: `~/Library/Application Support/EPINOX/VOX ENGINE/Voices/`) and pick it in ENGINE.
 
 This keeps the synthesiser's sound character; it does not replay recordings. The voice-library and neural paths are separate steps.
+
+## Phrase dynamics (v0.15)
+
+Syllables no longer all carry the same weight: a gentle swell runs across the phrase, higher notes are slightly louder and each word gets its own
+small level (about plus or minus 0.75 dB). It never adds silence, so a gate such as the one in EPINOX MOTION FX decides where the pauses go.
+Robotic voices stay flat. The same phrase and variation always give the same dynamics.

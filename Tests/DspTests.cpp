@@ -1155,6 +1155,40 @@ void testVoiceProfilePack()
     root.deleteRecursively();
 }
 
+void testDynamics()
+{
+    using namespace epinox;
+    std::printf ("\n[Phrase dynamics]\n");
+    auto make = [] { return voice::Composer::compose (voice::PhraseParser::parse ("never let me go and feel the rhythm tonight"), 0, 0, 1, 0, 11, 9, 1, 0.6f, 0); };
+    auto stats = [] (const voice::Composition& c)
+    {
+        double m = 0, v = 0;
+        for (auto& n : c.notes) m += n.accent;
+        m /= c.notes.size();
+        for (auto& n : c.notes) v += (n.accent - m) * (n.accent - m);
+        return std::pair<double, double> (m, std::sqrt (v / c.notes.size()));
+    };
+    auto a = make(), b = make(), c2 = make();
+    const auto before = stats (a);
+    voice::MelodySearch::shapeDynamics (b, 5, a.centreMidi);
+    voice::MelodySearch::shapeDynamics (c2, 5, a.centreMidi);
+    const auto after = stats (b);
+    check (after.second > before.second * 1.1, fmt ("levels vary more between syllables (spread %.3f -> %.3f)", before.second, after.second));
+    check (std::abs (after.first - before.first) < 0.06, fmt ("average level stays put (%.3f -> %.3f)", before.first, after.first));
+    bool same = b.notes.size() == c2.notes.size();
+    for (size_t i = 0; same && i < b.notes.size(); ++i) same = b.notes[i].accent == c2.notes[i].accent;
+    check (same, "dynamics are deterministic for a seed");
+    bool inRange = true;
+    for (auto& n : b.notes) inRange = inRange && n.accent >= 0.6f && n.accent <= 1.5f;
+    check (inRange, "accents stay in a safe range");
+
+    GenerationRequest r;
+    r.phrase = "never let me go"; r.sampleRate = 44100.0; r.bpm = 120; r.voiceType = 4;
+    auto robot1 = voice::renderPhrase (r);
+    auto robot2 = voice::renderPhrase (r);
+    check (robot1 && robot2 && robot1->left == robot2->left, "robotic voice renders identically every time");
+}
+
 } // namespace
 
 int main()
@@ -1171,6 +1205,7 @@ int main()
     testKeyDetector();
     testMorph();
     testVoiceProfilePack();
+    testDynamics();
 
     std::printf ("\n%s (%d failed)\n", failures == 0 ? "ALL CHECKS PASSED" : "SOME CHECKS FAILED", failures);
     return failures;

@@ -56,6 +56,10 @@ inline std::unique_ptr<GeneratedClip> renderPhrase (const GenerationRequest& r, 
         MelodySearch::refine (composition, ctx, seed ^ 0x51ED270BLL);
     }
 
+    // Robotic voices stay flat; everything else gets phrase dynamics.
+    if (r.voiceType != 4 && r.emotion != 9)
+        MelodySearch::shapeDynamics (composition, seed ^ 0x2D1A71CLL, composition.centreMidi);
+
     return VocalSynth::render (composition, r, cancelled);
 }
 } // namespace epinox::voice
