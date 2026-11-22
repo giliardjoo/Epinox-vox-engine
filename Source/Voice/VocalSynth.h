@@ -380,8 +380,8 @@ private:
             const int voices = V.unison;
             std::array<float, 3> detune {}, pan {};
 
-            if (voices == 2)      { detune = { -V.unisonCents, V.unisonCents, 0.0f }; pan = { -0.35f, 0.35f, 0.0f }; }
-            else if (voices == 3) { detune = { -V.unisonCents, 0.0f, V.unisonCents }; pan = { -0.5f, 0.0f, 0.5f }; }
+            if (voices == 2)      { detune = { -V.unisonCents, V.unisonCents, 0.0f }; pan = { -0.22f, 0.22f, 0.0f }; }
+            else if (voices == 3) { detune = { -V.unisonCents, 0.0f, V.unisonCents }; pan = { -0.32f, 0.0f, 0.32f }; }
 
             const float voiceGain = 1.0f / std::sqrt (static_cast<float> (voices));
 
@@ -653,7 +653,7 @@ private:
                 }
             }
 
-            const float drive = 1.0f + 1.4f * amount;
+            const float drive = 1.0f + 0.6f * amount;   // gentle: dry vocals in finished tracks keep a crest factor of about 11-13 dB
             const float norm = 1.0f / std::tanh (drive);
 
             for (auto* ch : { &clip.left, &clip.right })
