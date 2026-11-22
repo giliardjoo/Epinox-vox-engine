@@ -310,8 +310,8 @@ public:
         // Footer
         g.setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::bold)).withExtraKerningFactor (0.18f));
         g.setColour (textDim);
-        g.drawText ("EPINOX  |  ONE PHRASE. INFINITE POSSIBILITIES.",
-                    juce::Rectangle<float> (area.getRight() - 460.0f, 718.0f, 444.0f, 18.0f),
+        g.drawText (juce::String ("EPINOX  |  ONE PHRASE. INFINITE POSSIBILITIES.  |  V") + JucePlugin_VersionString,
+                    juce::Rectangle<float> (area.getRight() - 560.0f, 846.0f, 544.0f, 18.0f),
                     juce::Justification::centredRight);
     }
 
