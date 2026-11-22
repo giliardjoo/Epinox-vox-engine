@@ -3,6 +3,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <cmath>
 #include <vector>
+#include "FdnReverb.h"
 
 namespace epinox::dsp
 {
@@ -19,8 +20,10 @@ public:
         writePos = 0;
         lpL = lpR = 0.0f;
 
-        reverb.reset();
-        reverb.setSampleRate (sr);
+        room.prepare (sr);
+        room.setRt60 (1.6f);
+        room.setDensity (0.6f);
+        room.setDamping (0.4f);
 
         for (auto* s : { &onGain, &distort, &delayMix, &width })
             s->reset (sr, 0.02);
@@ -87,16 +90,16 @@ public:
             r[i] += dr * dm * 0.7f;
         }
 
-        // Reverb. juce::Reverb scales dry by 2 and wet by 3 internally, hence the constants.
-        juce::Reverb::Parameters p;
-        p.roomSize = 0.72f;
-        p.damping = 0.45f;
-        p.width = 1.0f;
-        p.freezeMode = 0.0f;
-        p.dryLevel = 0.5f;
-        p.wetLevel = reverb01 * onGain.getCurrentValue() * 0.25f;
-        reverb.setParameters (p);
-        reverb.processStereo (l, r, n);
+        // Reverb: the same network as the Spatial room, shorter and darker.
+        const float wet = reverb01 * onGain.getCurrentValue() * reverbGain;
+
+        for (int i = 0; i < n; ++i)
+        {
+            float wl = 0.0f, wr = 0.0f;
+            room.process (0.5f * (l[i] + r[i]), wl, wr);
+            l[i] += wl * wet;
+            r[i] += wr * wet;
+        }
 
         // Stereo width (mid/side)
         for (int i = 0; i < n; ++i)
@@ -111,12 +114,13 @@ public:
 
 private:
     static constexpr float feedback = 0.38f;
+    static constexpr float reverbGain = 0.67f;
 
     double sr = 44100.0;
     int delayLen = 88200, writePos = 0;
     float lpL = 0.0f, lpR = 0.0f;
     std::vector<float> delayL, delayR;
-    juce::Reverb reverb;
+    FdnReverb room;
     juce::SmoothedValue<float> onGain, distort, delayMix, width;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> delayTime;
 };

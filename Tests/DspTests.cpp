@@ -1189,6 +1189,56 @@ void testDynamics()
     check (robot1 && robot2 && robot1->left == robot2->left, "robotic voice renders identically every time");
 }
 
+void testReverbQuality()
+{
+    std::printf ("\n[Reverb engineering]\n");
+    const int n = static_cast<int> (sr * 8.0);
+
+    auto ir = [&] (float size)
+    {
+        std::vector<float> l (static_cast<size_t> (n), 0.0f), r = l;
+        l[0] = r[0] = 1.0f;
+        SpatialEngine sp;
+        sp.prepare (sr);
+        sp.process (l.data(), r.data(), n, true, size, 1.0f, 0.0f, 1.0f);
+        return l;
+    };
+
+    // time (s) for the energy envelope to fall 30 dB below its early level
+    auto t30 = [&] (const std::vector<float>& x)
+    {
+        const int w = static_cast<int> (sr * 0.05);
+        const double ref = rms (x, static_cast<int> (sr * 0.1), static_cast<int> (sr * 0.1) + w);
+        for (int i = static_cast<int> (sr * 0.2); i + w < n; i += w)
+            if (rms (x, i, i + w) < ref * 0.0316)
+                return i / sr;
+        return n / sr;
+    };
+
+    const auto big = ir (1.0f), small = ir (0.2f);
+    check (allFinite (big, 50.0f) && allFinite (small, 50.0f), "reverb stays finite at the longest and shortest sizes");
+    check (t30 (big) < 4.0 && t30 (big) > t30 (small), fmt ("RT60 is capped and grows with size (%.2f s vs %.2f s)", t30 (big), t30 (small)));
+
+    // a good diffuse tail has an even energy envelope: few fast ripples between 50 ms blocks
+    const int w = static_cast<int> (sr * 0.02);
+    double ripple = 0.0;
+    int cnt = 0;
+    for (int i = static_cast<int> (sr * 0.5); i + 2 * w < static_cast<int> (sr * 1.5); i += w)
+    {
+        const double a = rms (big, i, i + w), b = rms (big, i + w, i + 2 * w);
+        if (a > 1.0e-9 && b > 1.0e-9) { ripple += std::abs (std::log (a / b)); ++cnt; }
+    }
+    check (cnt > 0 && ripple / cnt < 0.6, fmt ("tail envelope is smooth (mean ripple %.3f)", cnt ? ripple / cnt : 0.0));
+
+    // sustained low tone must not build up a boom
+    auto in = sine (110.0, 0.3, n);
+    auto l = in, r = in;
+    SpatialEngine sp;
+    sp.prepare (sr);
+    sp.process (l.data(), r.data(), n, true, 0.9f, 0.7f, 0.0f, 1.0f);
+    check (allFinite (l, 20.0f) && rms (l, n / 2, n) < 3.0 * 0.3, fmt ("low tone through the room stays under control (%.3f)", rms (l, n / 2, n)));
+}
+
 } // namespace
 
 int main()
@@ -1206,6 +1256,7 @@ int main()
     testMorph();
     testVoiceProfilePack();
     testDynamics();
+    testReverbQuality();
 
     std::printf ("\n%s (%d failed)\n", failures == 0 ? "ALL CHECKS PASSED" : "SOME CHECKS FAILED", failures);
     return failures;

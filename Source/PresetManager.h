@@ -17,7 +17,7 @@ public:
     bool loadPreset (const juce::File& file);
     bool loadRelative (int delta);
 
-    // Factory presets come first in the previous / next order, then the user's own files.
+    // Previous / next step through the factory presets of the genre selected in the list, wrapping at its ends.
     bool loadFactory (int index);
     bool isFactoryCurrent() const { return currentFactory >= 0; }
 

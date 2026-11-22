@@ -104,26 +104,58 @@ bool PresetManager::loadFactory (int index)
     return true;
 }
 
+namespace
+{
+int genreOfPreset (const FactoryPreset& preset)
+{
+    for (const auto& kv : preset.values)
+        if (juce::String (kv.first) == pid::genre)
+            return static_cast<int> (kv.second);
+
+    return 0;
+}
+} // namespace
+
+// The arrows stay inside the genre that is selected in the list: they step through that genre's factory presets
+// and wrap around at its ends, instead of running on into the next genre. A user preset steps through the user's files.
 bool PresetManager::loadRelative (int delta)
 {
-    const auto files = listPresets();
-    const int nf = static_cast<int> (factoryPresets().size());
-    const int total = nf + files.size();
+    if (currentFactory < 0 && currentFile != juce::File())
+    {
+        const auto files = listPresets();
+        const int idx = files.indexOf (currentFile);
 
-    int current = -1;
+        if (idx >= 0)
+        {
+            const int count = files.size();
+            return loadPreset (files.getReference ((idx + delta % count + count) % count));
+        }
+    }
 
-    if (currentFactory >= 0)
-        current = currentFactory;
-    else if (currentFile != juce::File() && files.indexOf (currentFile) >= 0)
-        current = nf + files.indexOf (currentFile);
+    const auto& list = factoryPresets();
+    int genre = 0;
 
-    int next = 0;
+    if (auto* g = apvts.getRawParameterValue (pid::genre))
+        genre = static_cast<int> (std::lround (g->load()));
 
-    if (current < 0)
-        next = delta > 0 ? 0 : total - 1;
+    std::vector<int> inGenre;
+
+    for (size_t i = 0; i < list.size(); ++i)
+        if (genreOfPreset (list[i]) == genre)
+            inGenre.push_back (static_cast<int> (i));
+
+    if (inGenre.empty())
+        return false;
+
+    const int count = static_cast<int> (inGenre.size());
+    const auto it = std::find (inGenre.begin(), inGenre.end(), currentFactory);
+    int pos;
+
+    if (it == inGenre.end())
+        pos = delta > 0 ? 0 : count - 1;   // nothing from this genre loaded yet: start at its first or last preset
     else
-        next = (current + delta % total + total) % total;
+        pos = (static_cast<int> (it - inGenre.begin()) + delta % count + count) % count;
 
-    return next < nf ? loadFactory (next) : loadPreset (files.getReference (next - nf));
+    return loadFactory (inGenre[static_cast<size_t> (pos)]);
 }
 } // namespace epinox

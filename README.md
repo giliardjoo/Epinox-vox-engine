@@ -122,7 +122,7 @@ Details worth knowing:
 ## Factory presets (Phase 5)
 
 485 presets are built in, grouped by genre in the picker (`Source/FactoryPresets.h`). Click the preset name in the header to pick one from the genre menus, or use the
-arrows (factory presets first, then your own saved ones). Loading any preset (factory or file) generates its vocal automatically; Enter in the phrase field also generates. A factory preset resets every control to its default, applies its
+arrows (they stay inside the genre selected in the list and wrap around at its ends; your own saved presets are stepped through in their own list). Loading any preset (factory or file) generates its vocal automatically; Enter in the phrase field also generates. A factory preset resets every control to its default, applies its
 settings and generates its vocal straight away. Power is never changed by a preset.
 
 ## Tests
@@ -200,3 +200,7 @@ This keeps the synthesiser's sound character; it does not replay recordings. The
 Syllables no longer all carry the same weight: a gentle swell runs across the phrase, higher notes are slightly louder and each word gets its own
 small level (about plus or minus 0.75 dB). It never adds silence, so a gate such as the one in EPINOX MOTION FX decides where the pauses go.
 Robotic voices stay flat. The same phrase and variation always give the same dynamics.
+
+## Smoother reverbs (0.16)
+
+The Spatial room and the Effects reverb now use a feedback delay network (8 modulated delay lines, Hadamard mixing, input diffusion) instead of parallel comb filters. The tail is denser and no longer rings on pitched material; low frequencies are kept out of the tail so it cannot boom. Overall loudness and decay times are close to the previous versions, so existing presets still behave similarly (the longest Spatial room is now about 3 s).
