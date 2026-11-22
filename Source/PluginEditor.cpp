@@ -66,28 +66,41 @@ namespace
             g.drawText ("DRAG TO TRACK", r, juce::Justification::centred);
         }
 
+        DragHandle() { setMouseCursor (juce::MouseCursor::DraggingHandCursor); }
+
         void mouseEnter (const juce::MouseEvent&) override { over = true; repaint(); }
         void mouseExit (const juce::MouseEvent&) override  { over = false; repaint(); }
 
+        // The file is written when the button goes down, so the drag starts at once and the host
+        // is handed a finished WAV.
+        void mouseDown (const juce::MouseEvent&) override
+        {
+            dragging = false;
+            file = prepareFile ? prepareFile() : juce::File();
+        }
+
         void mouseDrag (const juce::MouseEvent& e) override
         {
-            if (dragging || e.getDistanceFromDragStart() < 6 || ! prepareFile)
-                return;
-
-            const auto f = prepareFile();
-
-            if (f == juce::File())
+            if (dragging || e.getDistanceFromDragStart() < 4 || ! file.existsAsFile())
                 return;
 
             dragging = true;
-            juce::DragAndDropContainer::performExternalDragDropOfFiles ({ f.getFullPathName() }, false, this,
+            juce::DragAndDropContainer::performExternalDragDropOfFiles ({ file.getFullPathName() }, false, this,
                                                                          [this] { dragging = false; });
         }
 
-        void mouseUp (const juce::MouseEvent&) override { dragging = false; }
+        // A plain click (no drag) shows the file in Explorer / Finder, so it can still be dropped by hand.
+        void mouseUp (const juce::MouseEvent& e) override
+        {
+            if (! dragging && e.getDistanceFromDragStart() < 4 && file.existsAsFile())
+                file.revealToUser();
+
+            dragging = false;
+        }
 
     private:
         bool over = false, dragging = false;
+        juce::File file;
     };
 }
 
