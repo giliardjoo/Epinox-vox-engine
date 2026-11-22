@@ -55,6 +55,7 @@ namespace pid
     inline constexpr const char* lfoShape   = "lfoShape";
     inline constexpr const char* lfoSync    = "lfoSync";
     inline constexpr const char* lfoRate    = "lfoRate";
+    inline constexpr const char* lfoPhase   = "lfoPhase";
     inline constexpr const char* lfoPitch   = "lfoPitch";
     inline constexpr const char* lfoFormant = "lfoFormant";
     inline constexpr const char* lfoFilter  = "lfoFilter";
@@ -76,13 +77,14 @@ inline juce::StringArray genreNames()
 
 inline juce::StringArray lfoShapeNames()
 {
-    return { "Sine", "Triangle", "Square", "Saw", "Random" };
+    return { "Sine", "Triangle", "Square", "Saw Down", "Random Smooth", "Saw Up", "Random Step" };
 }
 
 // Index 0 = free (uses Rate); the others follow the host tempo. Keep in step with LfoEngine::syncBeats().
 inline juce::StringArray lfoSyncNames()
 {
-    return { "Free", "4 Bars", "2 Bars", "1 Bar", "1/2", "1/4", "1/8", "1/16" };
+    return { "Free", "8 Bars", "4 Bars", "2 Bars", "1 Bar", "1/2", "1/2 D", "1/2 T", "1/4", "1/4 D", "1/4 T",
+             "1/8", "1/8 D", "1/8 T", "1/16", "1/16 D", "1/16 T", "1/32" };
 }
 
 inline juce::StringArray keyNames()
@@ -197,8 +199,9 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<APC> (id (pid::lfoShape), "LFO Shape", lfoShapeNames(), 0));
     layout.add (std::make_unique<APC> (id (pid::lfoSync),  "LFO Sync",  lfoSyncNames(),  0));
     layout.add (std::make_unique<APF> (id (pid::lfoRate), "LFO Rate",
-                                       juce::NormalisableRange<float> (0.05f, 20.0f, 0.01f, 0.4f), 1.0f,
+                                       [] { juce::NormalisableRange<float> r (0.02f, 30.0f, 0.01f); r.setSkewForCentre (1.5f); return r; }(), 1.0f,
                                        juce::AudioParameterFloatAttributes().withLabel ("Hz")));
+    addFloat (pid::lfoPhase, "LFO Phase", 0.0f, 360.0f, 0.0f, "deg", 1.0f);
     addPct (pid::lfoPitch,   "LFO Pitch",   0.0f);
     addPct (pid::lfoFormant, "LFO Formant", 0.0f);
     addPct (pid::lfoFilter,  "LFO Filter",  0.0f);

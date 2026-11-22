@@ -9,13 +9,16 @@ namespace epinox::dsp
 struct LfoParams
 {
     bool on = false;
-    int shape = 0;          // 0 sine, 1 triangle, 2 square, 3 saw, 4 random (smoothed sample & hold)
+    int shape = 0;          // 0 sine, 1 triangle, 2 square, 3 saw down, 4 random smooth, 5 saw up, 6 random step
     int sync = 0;           // 0 free (rateHz), otherwise an entry of LfoEngine::syncBeats()
     float rateHz = 1.0f;
+    float phase = 0.0f;     // start phase offset, 0..1 of a cycle
     float bpm = 128.0f;
+    bool hostLocked = false; // synced rates follow the host position (ppq) while the transport runs
+    double hostPpq = 0.0;    // host position, in quarter notes, at the start of the chunk
     float pitch = 0.0f;     // 0..1, 1 = +/- 2 semitones
     float formant = 0.0f;   // 0..1, 1 = +/- 4 semitones
-    float filter = 0.0f;    // 0..1, 1 = low-pass sweeping 240 Hz .. 12 kHz
+    float filter = 0.0f;    // 0..1, 1 = low-pass sweeping 150 Hz .. 12 kHz
     float volume = 0.0f;    // 0..1, 1 = tremolo down to silence
 
     bool active() const noexcept { return on && (pitch > 0.0f || formant > 0.0f || filter > 0.0f || volume > 0.0f); }
@@ -26,12 +29,18 @@ struct LfoParams
 class LfoEngine
 {
 public:
-    static constexpr float maxPitchSt = 2.0f, maxFormantSt = 4.0f;
+    static constexpr float maxPitchSt = 2.0f, maxFormantSt = 6.0f;
 
     // Cycle length in beats for every sync entry (index 0 = free running).
     static const std::vector<float>& syncBeats()
     {
-        static const std::vector<float> beats { 0.0f, 16.0f, 8.0f, 4.0f, 2.0f, 1.0f, 0.5f, 0.25f };
+        // Free, 8/4/2/1 bars, then half, quarter, eighth, sixteenth and thirty-second notes, each straight, dotted and triplet.
+        static const std::vector<float> beats { 0.0f, 32.0f, 16.0f, 8.0f, 4.0f,
+                                                2.0f, 3.0f, 4.0f / 3.0f,
+                                                1.0f, 1.5f, 2.0f / 3.0f,
+                                                0.5f, 0.75f, 1.0f / 3.0f,
+                                                0.25f, 0.375f, 1.0f / 6.0f,
+                                                0.125f };
         return beats;
     }
 
@@ -59,22 +68,34 @@ public:
         return juce::jmax (0.001f, p.bpm) / 60.0f / b[static_cast<size_t> (idx)];
     }
 
-    // Fills out[0..n) with the bipolar LFO (-1..1) and moves the phase on.
+    // Fills out[0..n) with the bipolar LFO (-1..1) and moves the phase on. Synced rates lock to the host position while
+    // the transport runs, so the LFO always starts a bar on the same point of its cycle.
     void generate (int n, const LfoParams& p, float* out)
     {
         const double inc = static_cast<double> (rateFor (p)) / sr;
+        const auto& beats = syncBeats();
+        const int idx = juce::jlimit (0, static_cast<int> (beats.size()) - 1, p.sync);
+
+        if (p.hostLocked && idx > 0)
+        {
+            const double cycles = p.hostPpq / static_cast<double> (beats[static_cast<size_t> (idx)]);
+            phase = cycles - std::floor (cycles);
+        }
 
         for (int i = 0; i < n; ++i)
         {
-            float raw = 0.0f;
+            double ph = phase + static_cast<double> (p.phase);
+            ph -= std::floor (ph);
             float s = 0.0f;
 
             switch (p.shape)
             {
-                case 0:  raw = std::sin (static_cast<float> (phase) * juce::MathConstants<float>::twoPi); s = raw; break;
-                case 1:  raw = static_cast<float> (phase < 0.5 ? 4.0 * phase - 1.0 : 3.0 - 4.0 * phase); s = raw; break;
-                case 2:  raw = phase < 0.5 ? 1.0f : -1.0f; smoothed += slew * (raw - smoothed); s = smoothed; break;
-                case 3:  raw = static_cast<float> (1.0 - 2.0 * phase); s = raw; break;
+                case 0:  s = std::sin (static_cast<float> (ph) * juce::MathConstants<float>::twoPi); break;
+                case 1:  s = static_cast<float> (ph < 0.5 ? 4.0 * ph - 1.0 : 3.0 - 4.0 * ph); break;
+                case 2:  smoothed += slew * ((ph < 0.5 ? 1.0f : -1.0f) - smoothed); s = smoothed; break;
+                case 3:  s = static_cast<float> (1.0 - 2.0 * ph); break;
+                case 5:  s = static_cast<float> (2.0 * ph - 1.0); break;
+                case 6:  smoothed += slew * (held - smoothed); s = smoothed; break;
                 default: smoothed += slowSlew * (held - smoothed); s = smoothed; break;
             }
 
@@ -104,7 +125,7 @@ public:
 
             if (p.filter > 0.0f)
             {
-                cutoffSm.setTargetValue (12000.0f * std::pow (0.02f, p.filter * (1.0f - u)));
+                cutoffSm.setTargetValue (12000.0f * std::pow (0.0125f, p.filter * (1.0f - u)));
 
                 if ((i & 7) == 0 || i == 0)
                 {
@@ -144,7 +165,7 @@ private:
     double sr = 44100.0, phase = 0.0;
     float held = 0.0f, smoothed = 0.0f, slew = 0.01f, slowSlew = 0.001f;
     std::uint32_t rnd = 12345u;
-    float g = 0.1f, k = 1.2f, a1 = 0.5f, a2 = 0.05f, a3 = 0.005f;
+    float g = 0.1f, k = 0.8f, a1 = 0.5f, a2 = 0.05f, a3 = 0.005f;
     Svf svf[2];
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> cutoffSm;
 };

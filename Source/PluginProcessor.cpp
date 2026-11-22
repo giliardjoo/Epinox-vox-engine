@@ -109,6 +109,7 @@ epinox::dsp::EngineParams VoxProcessor::readParams() const
     p.lfo.sync = static_cast<int> (v (pid::lfoSync) + 0.5f);
     p.lfo.rateHz = v (pid::lfoRate);
     p.lfo.bpm = p.bpm;
+    p.lfo.phase = v (pid::lfoPhase) / 360.0f;
     p.lfo.pitch = v (pid::lfoPitch) / 100.0f;
     p.lfo.formant = v (pid::lfoFormant) / 100.0f;
     p.lfo.filter = v (pid::lfoFilter) / 100.0f;
@@ -260,7 +261,18 @@ void VoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         }
     }
 
-    engine.process (buffer, readParams(), generated);
+    auto engineParams = readParams();
+
+    if (hostSynced && hostPlaying)
+    {
+        engineParams.lfo.hostLocked = true;
+        engineParams.lfo.hostPpq = ppq;
+
+        if (const auto hb = hostBpm.load(); hb > 20.0)
+            engineParams.lfo.bpm = static_cast<float> (hb);
+    }
+
+    engine.process (buffer, engineParams, generated);
 
     {
         const float target = juce::Decibels::decibelsToGain (gainParam->load());

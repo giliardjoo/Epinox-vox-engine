@@ -1305,11 +1305,64 @@ void testLfo()
     check (allFinite (pv, 2.0f) && rms (pv, static_cast<int> (sr * 2), n) > 0.05, "pitch LFO keeps a clean, finite signal");
 
     // Sync: 1/4 note at 120 BPM = 2 Hz.
-    dsp::LfoParams sy; sy.sync = 5; sy.bpm = 120.0f;
+    dsp::LfoParams sy; sy.sync = 8; sy.bpm = 120.0f;
     check (std::abs (dsp::LfoEngine::rateFor (sy) - 2.0f) < 1e-4f, "sync 1/4 at 120 BPM runs at 2 Hz");
 
+    // Host lock: a synced LFO is a pure function of the host position, so two engines started at different times agree.
+    {
+        dsp::LfoEngine e1, e2; e1.prepare (sr); e2.prepare (sr);
+        dsp::LfoParams lp; lp.on = true; lp.sync = 8; lp.bpm = 120.0f; lp.hostLocked = true; lp.hostPpq = 7.3;
+        std::vector<float> a (512), b (512);
+        e1.generate (512, lp, a.data());
+        lp.hostPpq = 7.3;
+        e2.generate (512, lp, b.data());
+        double d = 0.0; for (size_t i = 0; i < 512; ++i) d = std::max (d, static_cast<double> (std::abs (a[i] - b[i])));
+        lp.hostPpq = 7.3 + 1.0;   // one quarter note later = one full cycle for a 1/4 division
+        std::vector<float> c (512); e2.generate (512, lp, c.data());
+        double d2 = 0.0; for (size_t i = 0; i < 512; ++i) d2 = std::max (d2, static_cast<double> (std::abs (a[i] - c[i])));
+        check (d < 1e-6 && d2 < 1e-5, fmt ("synced LFO follows the host position (%.2g, %.2g)", d, d2));
+    }
+
+    // Dotted and triplet divisions.
+    {
+        dsp::LfoParams t; t.bpm = 120.0f; t.sync = 10;   // 1/4 triplet
+        dsp::LfoParams dd; dd.bpm = 120.0f; dd.sync = 9;  // 1/4 dotted
+        check (std::abs (dsp::LfoEngine::rateFor (t) - 3.0f) < 1e-3f && std::abs (dsp::LfoEngine::rateFor (dd) - 4.0f / 3.0f) < 1e-3f,
+               "triplet and dotted divisions run at the right rate");
+    }
+
+    // Phase offset: a quarter cycle later a sine starts at its peak.
+    {
+        dsp::LfoEngine e; e.prepare (sr);
+        dsp::LfoParams lp; lp.on = true; lp.shape = 0; lp.rateHz = 1.0f; lp.phase = 0.25f;
+        std::vector<float> a (4); e.generate (4, lp, a.data());
+        check (std::abs (a[0] - 1.0f) < 1e-3f, "phase offset moves the start of the cycle");
+    }
+
+    // Tremolo reaches the tail of the reverb now that the LFO runs last.
+    {
+        std::vector<float> burst (static_cast<size_t> (n), 0.0f);
+        for (int i = 0; i < 4000; ++i) burst[static_cast<size_t> (i)] = 0.4f * std::sin (2.0 * 3.14159265 * 330.0 * i / sr);
+        dsp::VoxEngine eng; eng.prepare (sr, 512);
+        dsp::EngineParams p; p.mix = 1.0f; p.trOn = false; p.fxOn = true; p.fxReverb = 0.8f; p.fxDelay = 0.0f; p.spOn = false;
+        p.lfo.on = true; p.lfo.shape = 0; p.lfo.rateHz = 3.0f; p.lfo.volume = 1.0f;
+        juce::AudioBuffer<float> b (2, n);
+        for (int i = 0; i < n; ++i) { b.setSample (0, i, burst[static_cast<size_t> (i)]); b.setSample (1, i, burst[static_cast<size_t> (i)]); }
+        for (int s0 = 0; s0 < n; s0 += 512)
+        {
+            juce::AudioBuffer<float> blk (b.getArrayOfWritePointers(), 2, s0, juce::jmin (512, n - s0));
+            eng.process (blk, p);
+        }
+        std::vector<float> o (static_cast<size_t> (n));
+        for (int i = 0; i < n; ++i) o[static_cast<size_t> (i)] = b.getSample (0, i);
+        double lo = 1.0, hi = 0.0;
+        for (int i = static_cast<int> (sr * 0.5); i + 1100 < static_cast<int> (sr * 2.5); i += 1100)
+        { const double r2 = rms (o, i, i + 1100); lo = std::min (lo, r2); hi = std::max (hi, r2); }
+        check (hi > 1.0e-4 && lo < 0.35 * hi, fmt ("tremolo also moves the reverb tail (%.5f .. %.5f)", lo, hi));
+    }
+
     // Every shape stays inside -1..1 and the random one moves.
-    for (int sh = 0; sh < 5; ++sh)
+    for (int sh = 0; sh < 7; ++sh)
     {
         dsp::LfoEngine e; e.prepare (sr);
         dsp::LfoParams lp; lp.on = true; lp.shape = sh; lp.rateHz = 3.0f;

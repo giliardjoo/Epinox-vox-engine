@@ -47,6 +47,8 @@ public:
         slider.setBounds (b);
     }
 
+    juce::Slider& getSlider() { return slider; }
+
 private:
     juce::Label caption;
     juce::Slider slider;
@@ -188,9 +190,11 @@ class LfoPanel : public juce::Component
 {
 public:
     explicit LfoPanel (juce::AudioProcessorValueTreeState& apvts)
-        : shape (apvts, epinox::pid::lfoShape, "SHAPE"),
+        : state (apvts),
+          shape (apvts, epinox::pid::lfoShape, "SHAPE"),
           sync (apvts, epinox::pid::lfoSync, "SYNC"),
           rate (apvts, epinox::pid::lfoRate, "RATE", " Hz", 2),
+          phase (apvts, epinox::pid::lfoPhase, "PHASE", " deg", 0),
           pitch (apvts, epinox::pid::lfoPitch, "> PITCH", " %", 0),
           formant (apvts, epinox::pid::lfoFormant, "> FORMANT", " %", 0),
           filter (apvts, epinox::pid::lfoFilter, "> FILTER", " %", 0),
@@ -199,8 +203,20 @@ public:
         addAndMakeVisible (toggle);
         toggleAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, epinox::pid::lfoOn, toggle);
 
-        for (auto* c : std::initializer_list<juce::Component*> { &shape, &sync, &rate, &pitch, &formant, &filter, &volume })
+        for (auto* c : std::initializer_list<juce::Component*> { &shape, &sync, &rate, &phase, &pitch, &formant, &filter, &volume })
             addAndMakeVisible (c);
+
+        // With a tempo division selected the rate knob reads as that note value instead of Hz.
+        rate.getSlider().textFromValueFunction = [this] (double v)
+        {
+            const int s = syncIndex();
+
+            if (s > 0)
+                return epinox::lfoSyncNames()[s];
+
+            return v < 10.0 ? juce::String (v, 2) + " Hz" : juce::String (v, 1) + " Hz";
+        };
+        rate.getSlider().updateText();
 
         refresh();
     }
@@ -208,15 +224,19 @@ public:
     void refresh()
     {
         const bool on = toggle.getToggleState();
+        const int s = syncIndex();
 
-        if (on != lastOn || ! initialised)
+        if (on != lastOn || s != lastSync || ! initialised)
         {
             lastOn = on;
+            lastSync = s;
             initialised = true;
 
-            for (auto* c : std::initializer_list<juce::Component*> { &shape, &sync, &rate, &pitch, &formant, &filter, &volume })
+            for (auto* c : std::initializer_list<juce::Component*> { &shape, &sync, &phase, &pitch, &formant, &filter, &volume })
                 c->setAlpha (on ? 1.0f : 0.35f);
 
+            rate.setAlpha (on ? 1.0f : 0.35f);
+            rate.getSlider().updateText();
             repaint();
         }
     }
@@ -239,7 +259,7 @@ public:
 
         g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::plain)));
         g.setColour (textDim);
-        g.drawFittedText ("One LFO moves pitch, formant, a low-pass filter and the level. Set a depth to 0 to leave that one alone.",
+        g.drawFittedText ("One LFO, four destinations. Pitch and formant act on the voice; filter and level act on the whole output. Depth 0 leaves a destination alone.",
                           juce::Rectangle<int> (static_cast<int> (b.getX()) + 16, static_cast<int> (b.getY()) + 40, 130, 62),
                           juce::Justification::topLeft, 5);
     }
@@ -254,17 +274,27 @@ public:
         shape.setBounds (combos.removeFromTop (b.getHeight() / 2).reduced (4, 4));
         sync.setBounds (combos.reduced (4, 4));
 
-        const int cw = b.getWidth() / 5;
-        for (auto* k : std::initializer_list<juce::Component*> { &rate, &pitch, &formant, &filter, &volume })
+        const int cw = b.getWidth() / 6;
+        for (auto* k : std::initializer_list<juce::Component*> { &rate, &phase, &pitch, &formant, &filter, &volume })
             k->setBounds (b.removeFromLeft (cw));
     }
 
 private:
+    int syncIndex() const
+    {
+        if (auto* v = state.getRawParameterValue (epinox::pid::lfoSync))
+            return static_cast<int> (v->load() + 0.5f);
+
+        return 0;
+    }
+
+    juce::AudioProcessorValueTreeState& state;
     juce::ToggleButton toggle;
     NeonCombo shape, sync;
-    NeonKnob rate, pitch, formant, filter, volume;
+    NeonKnob rate, phase, pitch, formant, filter, volume;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> toggleAttachment;
     bool lastOn = true, initialised = false;
+    int lastSync = -1;
 };
 
 //==============================================================================

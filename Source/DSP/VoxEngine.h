@@ -46,7 +46,7 @@ struct EngineParams
     LfoParams lfo;
 };
 
-// Signal flow: input (+ generated vocal) -> Vocal Chop -> Transform (+ LFO on pitch/formant, then LFO filter and level) -> Effects -> Spatial -> Mix (against the aligned dry signal).
+// Signal flow: input (+ generated vocal) -> Vocal Chop -> Transform (+ LFO on pitch/formant) -> Effects -> Spatial -> LFO filter and level -> Mix (against the aligned dry signal).
 class VoxEngine
 {
 public:
@@ -55,6 +55,7 @@ public:
     void prepare (double sampleRate, int maxBlockSize)
     {
         maxBlock = juce::jmax (16, maxBlockSize);
+        sampleRate_ = sampleRate;
         chop.prepare (sampleRate);
         transform.prepare (sampleRate);
         lfo.prepare (sampleRate);
@@ -148,7 +149,9 @@ private:
 
         if (lfoOn)
         {
-            lfo.generate (n, p.lfo, lfoBuf.data());
+            LfoParams lp = p.lfo;
+            lp.hostPpq += static_cast<double> (offset) * static_cast<double> (lp.bpm) / 60.0 / sampleRate_;
+            lfo.generate (n, lp, lfoBuf.data());
             float mean = 0.0f;
 
             for (int i = 0; i < n; ++i)
@@ -162,11 +165,13 @@ private:
 
         transform.process (l, r, n, pitchTotal, formantTotal, p.trOn, p.trRobot, p.trGrain, forceShift);
 
-        if (lfoOn)
-            lfo.applyAudio (l, r, n, p.lfo, lfoBuf.data());
 
         effects.process (l, r, n, p.fxOn, p.fxReverb, p.fxDelay, p.fxDistort, p.fxWidth, p.bpm);
         spatial.process (l, r, n, p.spOn, p.spSize, p.spDensity, p.spDucking, p.spMix);
+
+        // Filter and level run last, so the reverb and delay tails move with them and the effect is always audible.
+        if (lfoOn)
+            lfo.applyAudio (l, r, n, p.lfo, lfoBuf.data());
 
         for (int i = 0; i < n; ++i)
         {
@@ -184,6 +189,7 @@ private:
     }
 
     int maxBlock = 512;
+    double sampleRate_ = 44100.0;
     bool firstCall = true;
     ChopEngine chop;
     TransformEngine transform;

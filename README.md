@@ -207,11 +207,13 @@ The Spatial room and the Effects reverb now use a feedback delay network (8 modu
 
 ## LFO (0.17)
 
-A new strip at the bottom of the window holds one LFO that moves four things at once. Each destination has its own depth knob (0 leaves it alone):
+A strip at the bottom of the window holds one LFO that moves four things at once. Each destination has its own depth knob (0 leaves it alone):
 
-- **PITCH** – vibrato, up to ±2 semitones.
-- **FORMANT** – the vowel colour breathes, up to ±4 semitones.
-- **FILTER** – a low-pass sweeps between 240 Hz and 12 kHz.
-- **VOLUME** – tremolo, down to full silence.
+- **PITCH** - vibrato, up to +/-2 semitones (acts on the voice, before the effects).
+- **FORMANT** - the vowel colour breathes, up to +/-6 semitones (acts on the voice, before the effects).
+- **FILTER** - a low-pass sweeps between 150 Hz and 12 kHz, with a little resonance.
+- **VOLUME** - tremolo, down to full silence.
 
-Shapes: sine, triangle, square, saw and random (smoothed sample & hold). **SYNC** locks the cycle to the BPM from 4 bars down to 1/16; Free uses the RATE knob (0.05–20 Hz). The LFO sits after Transform and before Effects and Spatial, so reverb and delay tails are not modulated, and it works on the sound already generated: moving it never regenerates the melody. 100 of the factory presets use it.
+Filter and volume run at the very end of the chain, so reverb and delay tails move with them.
+
+Shapes: sine, triangle, square, saw down, saw up, random smooth and random step. **SYNC** is Free (the RATE knob, 0.02-30 Hz, log taper) or a tempo division: 8 bars down to 1/32, each straight, dotted (D) and triplet (T). While the host plays, synced LFOs lock to the host position, so a cycle always starts on the beat; **PHASE** shifts where the cycle starts. When SYNC is not Free the RATE knob shows the note value. Moving the LFO never regenerates the melody. 100 of the factory presets use it.
