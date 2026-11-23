@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 # Link the Microsoft runtime statically so the plugin loads on any Windows PC, without the VC++ redistributable.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(EPINOX_VOX_ENGINE VERSION 0.17.2 LANGUAGES C CXX)
+project(EPINOX_VOX_ENGINE VERSION 0.17.3 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

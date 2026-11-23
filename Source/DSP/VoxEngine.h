@@ -46,7 +46,7 @@ struct EngineParams
     LfoParams lfo;
 };
 
-// Signal flow: input (+ generated vocal) -> Vocal Chop -> Transform (+ LFO on pitch/formant) -> Effects -> Spatial -> LFO filter and level -> Mix (against the aligned dry signal).
+// Signal flow: input (+ generated vocal) -> Vocal Chop -> Transform (+ LFO on formant) -> Effects -> Spatial -> LFO vibrato, filter and level -> Mix (against the aligned dry signal).
 class VoxEngine
 {
 public:
@@ -165,14 +165,15 @@ private:
 
         transform.process (l, r, n, pitchTotal, formantTotal, p.trOn, p.trRobot, p.trGrain, forceShift);
 
-        if (lfoOn && p.lfo.pitch > 0.0f)
-            vibrato.process (l, r, n, p.lfo, LfoEngine::rateFor (p.lfo), lfoBuf.data());
-
 
         effects.process (l, r, n, p.fxOn, p.fxReverb, p.fxDelay, p.fxDistort, p.fxWidth, p.bpm);
         spatial.process (l, r, n, p.spOn, p.spSize, p.spDensity, p.spDucking, p.spMix);
 
-        // Filter and level run last, so the reverb and delay tails move with them and the effect is always audible.
+        // Vibrato, filter and level run last, so the reverb and delay tails move with them: the effect does not stop
+        // when the note does, it dies away with the tail.
+        if (lfoOn && p.lfo.pitch > 0.0f)
+            vibrato.process (l, r, n, p.lfo, LfoEngine::rateFor (p.lfo), lfoBuf.data());
+
         if (lfoOn)
             lfo.applyAudio (l, r, n, p.lfo, lfoBuf.data());
 

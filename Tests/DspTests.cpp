@@ -1371,6 +1371,36 @@ void testLfo()
         check (hi > 1.0e-4 && lo < 0.35 * hi, fmt ("tremolo also moves the reverb tail (%.5f .. %.5f)", lo, hi));
     }
 
+    // The vibrato reaches the tail: after the note stops, the reverb still carries the pitch movement.
+    {
+        std::vector<float> burst (static_cast<size_t> (n), 0.0f);
+        for (int i = 0; i < 8000; ++i) burst[static_cast<size_t> (i)] = 0.4f * std::sin (2.0 * 3.14159265 * 330.0 * i / sr);
+        auto tailZc = [&] (float pitchDepth)
+        {
+            dsp::VoxEngine eng; eng.prepare (sr, 512);
+            dsp::EngineParams p; p.mix = 1.0f; p.trOn = false; p.fxOn = true; p.fxReverb = 0.9f; p.fxDelay = 0.0f; p.spOn = false;
+            p.lfo.on = true; p.lfo.shape = 0; p.lfo.rateHz = 5.0f; p.lfo.pitch = pitchDepth;
+            juce::AudioBuffer<float> b (2, n);
+            for (int i = 0; i < n; ++i) { b.setSample (0, i, burst[static_cast<size_t> (i)]); b.setSample (1, i, burst[static_cast<size_t> (i)]); }
+            for (int s0 = 0; s0 < n; s0 += 512)
+            {
+                juce::AudioBuffer<float> blk (b.getArrayOfWritePointers(), 2, s0, juce::jmin (512, n - s0));
+                eng.process (blk, p);
+            }
+            // spread of the tail's zero-crossing rate between 0.3 s and 1.3 s
+            int lo = 1 << 30, hi = 0;
+            for (int i = static_cast<int> (sr * 0.3); i + 2205 < static_cast<int> (sr * 1.3); i += 551)
+            {
+                int c = 0;
+                for (int k = i + 1; k < i + 2205; ++k) if ((b.getSample (0, k - 1) < 0) != (b.getSample (0, k) < 0)) ++c;
+                lo = std::min (lo, c); hi = std::max (hi, c);
+            }
+            return hi - lo;
+        };
+        const int off = tailZc (0.0f), on = tailZc (1.0f);
+        check (on > off + 2, fmt ("pitch LFO keeps moving the reverb tail (crossing spread %.0f vs %.0f)", static_cast<double> (on), static_cast<double> (off)));
+    }
+
     // Every shape stays inside -1..1 and the random one moves.
     for (int sh = 0; sh < 7; ++sh)
     {
