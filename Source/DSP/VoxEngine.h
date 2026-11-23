@@ -59,6 +59,7 @@ public:
         chop.prepare (sampleRate);
         transform.prepare (sampleRate);
         lfo.prepare (sampleRate);
+        vibrato.prepare (sampleRate);
         lfoBuf.assign (static_cast<size_t> (maxBlock), 0.0f);
         effects.prepare (sampleRate);
         spatial.prepare (sampleRate);
@@ -158,12 +159,14 @@ private:
                 mean += lfoBuf[static_cast<size_t> (i)];
 
             mean /= static_cast<float> (n);
-            pitchTotal += mean * p.lfo.pitch * LfoEngine::maxPitchSt;
             formantTotal += mean * p.lfo.formant * LfoEngine::maxFormantSt;
-            forceShift = p.lfo.pitch > 0.0f || p.lfo.formant > 0.0f;
+            forceShift = p.lfo.formant > 0.0f;
         }
 
         transform.process (l, r, n, pitchTotal, formantTotal, p.trOn, p.trRobot, p.trGrain, forceShift);
+
+        if (lfoOn && p.lfo.pitch > 0.0f)
+            vibrato.process (l, r, n, p.lfo, LfoEngine::rateFor (p.lfo), lfoBuf.data());
 
 
         effects.process (l, r, n, p.fxOn, p.fxReverb, p.fxDelay, p.fxDistort, p.fxWidth, p.bpm);
@@ -194,6 +197,7 @@ private:
     ChopEngine chop;
     TransformEngine transform;
     LfoEngine lfo;
+    VibratoDelay vibrato;
     std::vector<float> lfoBuf;
     EffectsEngine effects;
     SpatialEngine spatial;

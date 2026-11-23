@@ -53,7 +53,8 @@ namespace pid
     // LFO
     inline constexpr const char* lfoOn      = "lfoOn";
     inline constexpr const char* lfoShape   = "lfoShape";
-    inline constexpr const char* lfoSync    = "lfoSync";
+    inline constexpr const char* lfoSyncOn  = "lfoSyncOn";
+    inline constexpr const char* lfoDiv     = "lfoDiv";
     inline constexpr const char* lfoRate    = "lfoRate";
     inline constexpr const char* lfoPhase   = "lfoPhase";
     inline constexpr const char* lfoPitch   = "lfoPitch";
@@ -80,10 +81,10 @@ inline juce::StringArray lfoShapeNames()
     return { "Sine", "Triangle", "Square", "Saw Down", "Random Smooth", "Saw Up", "Random Step" };
 }
 
-// Index 0 = free (uses Rate); the others follow the host tempo. Keep in step with LfoEngine::syncBeats().
-inline juce::StringArray lfoSyncNames()
+// Tempo divisions, used when LFO Sync is on (Rate is used when it is off). Keep in step with LfoEngine::syncBeats(), which has "free" in front.
+inline juce::StringArray lfoDivNames()
 {
-    return { "Free", "8 Bars", "4 Bars", "2 Bars", "1 Bar", "1/2", "1/2 D", "1/2 T", "1/4", "1/4 D", "1/4 T",
+    return { "8 Bars", "4 Bars", "2 Bars", "1 Bar", "1/2", "1/2 D", "1/2 T", "1/4", "1/4 D", "1/4 T",
              "1/8", "1/8 D", "1/8 T", "1/16", "1/16 D", "1/16 T", "1/32" };
 }
 
@@ -197,7 +198,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     addToggle (pid::lfoOn, "LFO On", false);
     layout.add (std::make_unique<APC> (id (pid::lfoShape), "LFO Shape", lfoShapeNames(), 0));
-    layout.add (std::make_unique<APC> (id (pid::lfoSync),  "LFO Sync",  lfoSyncNames(),  0));
+    addToggle (pid::lfoSyncOn, "LFO Sync", false);
+    layout.add (std::make_unique<APC> (id (pid::lfoDiv),   "LFO Division", lfoDivNames(), 7));
     layout.add (std::make_unique<APF> (id (pid::lfoRate), "LFO Rate",
                                        [] { juce::NormalisableRange<float> r (0.02f, 30.0f, 0.01f); r.setSkewForCentre (1.5f); return r; }(), 1.0f,
                                        juce::AudioParameterFloatAttributes().withLabel ("Hz")));

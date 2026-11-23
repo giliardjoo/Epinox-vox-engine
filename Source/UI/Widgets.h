@@ -192,7 +192,7 @@ public:
     explicit LfoPanel (juce::AudioProcessorValueTreeState& apvts)
         : state (apvts),
           shape (apvts, epinox::pid::lfoShape, "SHAPE"),
-          sync (apvts, epinox::pid::lfoSync, "SYNC"),
+          sync (apvts, epinox::pid::lfoDiv, "DIVISION"),
           rate (apvts, epinox::pid::lfoRate, "RATE", " Hz", 2),
           phase (apvts, epinox::pid::lfoPhase, "PHASE", " deg", 0),
           pitch (apvts, epinox::pid::lfoPitch, "> PITCH", " %", 0),
@@ -202,6 +202,9 @@ public:
     {
         addAndMakeVisible (toggle);
         toggleAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, epinox::pid::lfoOn, toggle);
+        addAndMakeVisible (syncToggle);
+        syncToggle.setButtonText ("SYNC");
+        syncAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, epinox::pid::lfoSyncOn, syncToggle);
 
         for (auto* c : std::initializer_list<juce::Component*> { &shape, &sync, &rate, &phase, &pitch, &formant, &filter, &volume })
             addAndMakeVisible (c);
@@ -212,7 +215,7 @@ public:
             const int s = syncIndex();
 
             if (s > 0)
-                return epinox::lfoSyncNames()[s];
+                return epinox::lfoDivNames()[s - 1];
 
             return v < 10.0 ? juce::String (v, 2) + " Hz" : juce::String (v, 1) + " Hz";
         };
@@ -232,10 +235,12 @@ public:
             lastSync = s;
             initialised = true;
 
-            for (auto* c : std::initializer_list<juce::Component*> { &shape, &sync, &phase, &pitch, &formant, &filter, &volume })
+            for (auto* c : std::initializer_list<juce::Component*> { &shape, &phase, &pitch, &formant, &filter, &volume, &syncToggle })
                 c->setAlpha (on ? 1.0f : 0.35f);
 
-            rate.setAlpha (on ? 1.0f : 0.35f);
+            // Only the control that is in use (Hz rate or tempo division) is lit.
+            rate.setAlpha (on ? (s > 0 ? 0.55f : 1.0f) : 0.35f);
+            sync.setAlpha (on ? (s > 0 ? 1.0f : 0.55f) : 0.35f);
             rate.getSlider().updateText();
             repaint();
         }
@@ -270,9 +275,11 @@ public:
         auto left = b.removeFromLeft (160);
         toggle.setBounds (left.removeFromTop (34).removeFromRight (48).reduced (4));
 
-        auto combos = b.removeFromLeft (130);
+        auto combos = b.removeFromLeft (150);
         shape.setBounds (combos.removeFromTop (b.getHeight() / 2).reduced (4, 4));
-        sync.setBounds (combos.reduced (4, 4));
+        auto lower = combos.reduced (4, 4);
+        syncToggle.setBounds (lower.removeFromRight (56).removeFromTop (22));
+        sync.setBounds (lower);
 
         const int cw = b.getWidth() / 6;
         for (auto* k : std::initializer_list<juce::Component*> { &rate, &phase, &pitch, &formant, &filter, &volume })
@@ -282,17 +289,20 @@ public:
 private:
     int syncIndex() const
     {
-        if (auto* v = state.getRawParameterValue (epinox::pid::lfoSync))
-            return static_cast<int> (v->load() + 0.5f);
+        auto* on = state.getRawParameterValue (epinox::pid::lfoSyncOn);
+        auto* div = state.getRawParameterValue (epinox::pid::lfoDiv);
+
+        if (on != nullptr && div != nullptr && on->load() > 0.5f)
+            return static_cast<int> (div->load() + 0.5f) + 1;
 
         return 0;
     }
 
     juce::AudioProcessorValueTreeState& state;
-    juce::ToggleButton toggle;
+    juce::ToggleButton toggle, syncToggle;
     NeonCombo shape, sync;
     NeonKnob rate, phase, pitch, formant, filter, volume;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> toggleAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> toggleAttachment, syncAttachment;
     bool lastOn = true, initialised = false;
     int lastSync = -1;
 };

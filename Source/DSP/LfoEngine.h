@@ -55,6 +55,10 @@ public:
         for (auto& c : svf) c = {};
         cutoffSm.reset (sr, 0.003);
         cutoffSm.setCurrentAndTargetValue (12000.0f);
+        rateSm.reset (sr, 0.03);
+        rateSm.setCurrentAndTargetValue (1.0f);
+        gainSm.reset (sr, 0.004);
+        gainSm.setCurrentAndTargetValue (1.0f);
     }
 
     static float rateFor (const LfoParams& p)
@@ -72,18 +76,24 @@ public:
     // the transport runs, so the LFO always starts a bar on the same point of its cycle.
     void generate (int n, const LfoParams& p, float* out)
     {
-        const double inc = static_cast<double> (rateFor (p)) / sr;
+        rateSm.setTargetValue (rateFor (p));   // automating the rate or the division glides instead of jumping
         const auto& beats = syncBeats();
         const int idx = juce::jlimit (0, static_cast<int> (beats.size()) - 1, p.sync);
 
-        if (p.hostLocked && idx > 0)
-        {
-            const double cycles = p.hostPpq / static_cast<double> (beats[static_cast<size_t> (idx)]);
-            phase = cycles - std::floor (cycles);
-        }
+        const bool locked = p.hostLocked && idx > 0;
+        const double beatsPerSample = static_cast<double> (p.bpm) / 60.0 / sr;
+        const double cycleBeats = locked ? static_cast<double> (beats[static_cast<size_t> (idx)]) : 1.0;
 
         for (int i = 0; i < n; ++i)
         {
+            const double inc = static_cast<double> (rateSm.getNextValue()) / sr;
+
+            if (locked)
+            {
+                const double cycles = (p.hostPpq + i * beatsPerSample) / cycleBeats;
+                phase = cycles - std::floor (cycles);
+            }
+
             double ph = phase + static_cast<double> (p.phase);
             ph -= std::floor (ph);
             float s = 0.0f;
@@ -142,7 +152,8 @@ public:
 
             if (p.volume > 0.0f)
             {
-                const float gain = 1.0f - p.volume * (1.0f - u);
+                gainSm.setTargetValue (1.0f - p.volume * (1.0f - u));
+                const float gain = gainSm.getNextValue();
                 l[i] *= gain;
                 r[i] *= gain;
             }
@@ -167,6 +178,74 @@ private:
     std::uint32_t rnd = 12345u;
     float g = 0.1f, k = 0.8f, a1 = 0.5f, a2 = 0.05f, a3 = 0.005f;
     Svf svf[2];
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> cutoffSm;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> cutoffSm, rateSm;
+    juce::SmoothedValue<float> gainSm;
+};
+
+// Vibrato as a modulated delay line (the classic way): clean, no phase-vocoder artefacts, and the level stays constant.
+// The delay is the integral of the LFO, so the pitch follows the LFO shape (up to +/-2 semitones at full depth).
+class VibratoDelay
+{
+public:
+    void prepare (double sampleRate)
+    {
+        sr = sampleRate;
+        size = static_cast<int> (0.12 * sr) + 8;
+        bufL.assign (static_cast<size_t> (size), 0.0f);
+        bufR = bufL;
+        pos = 0;
+        integral = 0.0f;
+        amp.reset (sr, 0.15);
+        amp.setCurrentAndTargetValue (0.0f);
+    }
+
+    static constexpr float maxDelay = 0.035f;   // seconds; slow, deep settings are limited so the delay stays short
+
+    void process (float* l, float* r, int n, const LfoParams& p, float rateHz, const float* lfo)
+    {
+        const float k0 = 0.057762265f * LfoEngine::maxPitchSt * p.pitch;    // ln2 / 12 per semitone
+        const float peak = k0 * 0.27f / juce::jmax (0.05f, rateHz);          // largest swing of the integral
+        const float scale = peak > maxDelay ? maxDelay / peak : 1.0f;
+        const float k = k0 * scale;
+        amp.setTargetValue (juce::jmin (peak, maxDelay) + 0.0005f);
+        const float leak = 2.0f * juce::MathConstants<float>::pi * 0.1f / static_cast<float> (sr);
+
+        for (int i = 0; i < n; ++i)
+        {
+            integral += lfo[i] / static_cast<float> (sr);
+            integral -= leak * integral;
+
+            const float a = amp.getNextValue();
+            const float d = juce::jlimit (2.0f, static_cast<float> (size - 4),
+                                          static_cast<float> (sr) * juce::jlimit (0.0f, 2.0f * a, a - k * integral) + 2.0f);
+
+            bufL[static_cast<size_t> (pos)] = l[i];
+            bufR[static_cast<size_t> (pos)] = r[i];
+            l[i] = read (bufL, d);
+            r[i] = read (bufR, d);
+
+            if (++pos >= size)
+                pos = 0;
+        }
+    }
+
+private:
+    float read (const std::vector<float>& b, float delay) const
+    {
+        const float rp = static_cast<float> (pos) - delay;
+        const float f = rp - std::floor (rp);
+        int i1 = static_cast<int> (std::floor (rp));
+        i1 = ((i1 % size) + size) % size;
+        const float y0 = b[static_cast<size_t> ((i1 + size - 1) % size)], y1 = b[static_cast<size_t> (i1)];
+        const float y2 = b[static_cast<size_t> ((i1 + 1) % size)], y3 = b[static_cast<size_t> ((i1 + 2) % size)];
+        const float c1 = 0.5f * (y2 - y0), c2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3, c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+        return ((c3 * f + c2) * f + c1) * f + y1;
+    }
+
+    double sr = 44100.0;
+    int size = 4096, pos = 0;
+    float integral = 0.0f;
+    std::vector<float> bufL, bufR;
+    juce::SmoothedValue<float> amp;
 };
 } // namespace epinox::dsp

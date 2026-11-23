@@ -106,7 +106,7 @@ epinox::dsp::EngineParams VoxProcessor::readParams() const
 
     p.lfo.on = v (pid::lfoOn) > 0.5f;
     p.lfo.shape = static_cast<int> (v (pid::lfoShape) + 0.5f);
-    p.lfo.sync = static_cast<int> (v (pid::lfoSync) + 0.5f);
+    p.lfo.sync = v (pid::lfoSyncOn) > 0.5f ? static_cast<int> (v (pid::lfoDiv) + 0.5f) + 1 : 0;
     p.lfo.rateHz = v (pid::lfoRate);
     p.lfo.bpm = p.bpm;
     p.lfo.phase = v (pid::lfoPhase) / 360.0f;

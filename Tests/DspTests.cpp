@@ -1302,7 +1302,16 @@ void testLfo()
     // Pitch LFO: a held tone gets frequency modulation, so the zero-crossing rate moves around.
     dsp::LfoParams pit; pit.on = true; pit.shape = 0; pit.rateHz = 1.0f; pit.pitch = 1.0f;
     const auto pv = run (pit, tone);
-    check (allFinite (pv, 2.0f) && rms (pv, static_cast<int> (sr * 2), n) > 0.05, "pitch LFO keeps a clean, finite signal");
+    {
+        double rlo = 1e9, rhi = 0.0;
+        for (int i = static_cast<int> (sr * 2); i + 1024 < n; i += 1024) { const double q2 = rms (pv, i, i + 1024); rlo = std::min (rlo, q2); rhi = std::max (rhi, q2); }
+        // zero crossings per window swing up and down with the vibrato
+        auto zc = [&] (int a) { int c = 0; for (int i = a + 1; i < a + 2205; ++i) if ((pv[static_cast<size_t> (i - 1)] < 0) != (pv[static_cast<size_t> (i)] < 0)) ++c; return c; };
+        int zmin = 1 << 30, zmax = 0;
+        for (int i = static_cast<int> (sr * 2); i + 2205 < n; i += 551) { const int c = zc (i); zmin = std::min (zmin, c); zmax = std::max (zmax, c); }
+        check (allFinite (pv, 2.0f) && rlo > 0.85 * rhi && zmax > zmin + 4,
+               fmt ("pitch LFO is a clean vibrato: level %.3f .. %.3f, crossing swing %.0f", rlo, rhi, static_cast<double> (zmax - zmin)));
+    }
 
     // Sync: 1/4 note at 120 BPM = 2 Hz.
     dsp::LfoParams sy; sy.sync = 8; sy.bpm = 120.0f;
@@ -1322,6 +1331,7 @@ void testLfo()
         double d2 = 0.0; for (size_t i = 0; i < 512; ++i) d2 = std::max (d2, static_cast<double> (std::abs (a[i] - c[i])));
         check (d < 1e-6 && d2 < 1e-5, fmt ("synced LFO follows the host position (%.2g, %.2g)", d, d2));
     }
+
 
     // Dotted and triplet divisions.
     {
