@@ -41,7 +41,7 @@ automatically. Without it the header shows a plain text wordmark.
 | 2 | Audio engine: Vocal Chop, Transform, Effects, Spatial, Mix | done, validated by numerical tests |
 | 3 | Vocal generation (GENERATE), offline synthesis | done, validated by numerical tests |
 | 4 | Musical intelligence: Key and Scale, chord-tone melodies, tonic resolution | done, validated by numerical tests |
-| 5 | 585 factory presets that generate their own vocal | done |
+| 5 | 685 factory presets that generate their own vocal | done |
 | 6 | Commercial parameter document, licensing | not started |
 
 What is real today:
@@ -121,7 +121,7 @@ Details worth knowing:
 
 ## Factory presets (Phase 5)
 
-585 presets are built in, grouped by genre in the picker (`Source/FactoryPresets.h`). Click the preset name in the header to pick one from the genre menus, or use the
+685 presets are built in, grouped by genre in the picker (`Source/FactoryPresets.h`). Click the preset name in the header to pick one from the genre menus, or use the
 arrows (they stay inside the genre selected in the list and wrap around at its ends; your own saved presets are stepped through in their own list). Loading any preset (factory or file) generates its vocal automatically; Enter in the phrase field also generates. A factory preset resets every control to its default, applies its
 settings and generates its vocal straight away. Power is never changed by a preset.
 
@@ -216,6 +216,6 @@ A strip at the bottom of the window holds one LFO that moves four things at once
 
 Vibrato, filter and volume run at the very end of the chain, so reverb and delay tails move with them and the effect dies away with the tail instead of stopping with the note. (Formant acts on the voice before the effects.)
 
-Shapes: sine, triangle, square, saw down, saw up, random smooth and random step. **SYNC** is a switch: off uses the RATE knob (0.02-30 Hz, log taper), on uses the **DIVISION** menu, from 8 bars down to 1/32, each straight, dotted (D) and triplet (T). SYNC and DIVISION are separate host parameters ("LFO Sync" and "LFO Division"), so both can be automated in the DAW; rate and division changes glide instead of jumping. While the host plays, synced LFOs lock to the host position, so a cycle always starts on the beat; **PHASE** shifts where the cycle starts. When SYNC is not Free the RATE knob shows the note value. Moving the LFO never regenerates the melody. 100 of the factory presets use it.
+Shapes: sine, triangle, square, saw down, saw up, random smooth and random step. **SYNC** is a switch: off uses the RATE knob (0.02-30 Hz, log taper), on uses the **DIVISION** menu, from 8 bars down to 1/32, each straight, dotted (D) and triplet (T). SYNC and DIVISION are separate host parameters ("LFO Sync" and "LFO Division"), so both can be automated in the DAW; rate and division changes glide instead of jumping. While the host plays, synced LFOs lock to the host position, so a cycle always starts on the beat; **PHASE** shifts where the cycle starts. When SYNC is not Free the RATE knob shows the note value. Moving the LFO never regenerates the melody. 200 of the factory presets use it.
 
 **FADE IN** (0.17.4) - the LFO depth restarts from zero at every new note and grows over the chosen time (0 = off, up to 3 s). A long lead starts straight and the vibrato grows in, as a singer does it. A note is detected when the voice starts after silence; it applies to all four destinations.
