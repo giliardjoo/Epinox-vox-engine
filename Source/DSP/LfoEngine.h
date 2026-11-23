@@ -13,6 +13,7 @@ struct LfoParams
     int sync = 0;           // 0 free (rateHz), otherwise an entry of LfoEngine::syncBeats()
     float rateHz = 1.0f;
     float phase = 0.0f;     // start phase offset, 0..1 of a cycle
+    float fadeMs = 0.0f;    // the LFO fades in over this long after every new note (0 = off)
     float bpm = 128.0f;
     bool hostLocked = false; // synced rates follow the host position (ppq) while the transport runs
     double hostPpq = 0.0;    // host position, in quarter notes, at the start of the chunk
@@ -48,6 +49,7 @@ public:
     {
         sr = sampleRate;
         phase = 0.0;
+        env = 0.0f; fade = 1.0f; noteOn = false; quiet = 0;
         held = 0.0f;
         smoothed = 0.0f;
         slew = 1.0f - std::exp (-1.0f / (0.006f * static_cast<float> (sr)));
@@ -121,6 +123,44 @@ public:
         }
     }
 
+    // Fade-in: every time the voice starts after silence the LFO depth ramps up from nothing over fadeMs, so a long
+    // note starts straight and the vibrato grows in, as a singer does it. Scales out[0..n) in place.
+    void applyFade (const float* l, const float* r, int n, float fadeMs, float* out)
+    {
+        if (fadeMs <= 0.0f)
+        {
+            fade = 1.0f;
+            return;
+        }
+
+        const float inc = 1000.0f / (fadeMs * static_cast<float> (sr));
+
+        for (int i = 0; i < n; ++i)
+        {
+            const float a = juce::jmax (std::abs (l[i]), std::abs (r[i]));
+            env += (a > env ? 0.05f : 0.0008f) * (a - env);
+
+            if (! noteOn && env > 0.003f)
+            {
+                noteOn = true;
+                fade = 0.0f;
+            }
+            else if (noteOn && env < 0.0015f)
+            {
+                if (++quiet > static_cast<int> (0.08 * sr))
+                {
+                    noteOn = false;
+                    quiet = 0;
+                }
+            }
+            else
+                quiet = 0;
+
+            fade = juce::jmin (1.0f, fade + inc);
+            out[i] *= fade * fade * (3.0f - 2.0f * fade);   // smoothstep
+        }
+    }
+
     // Low-pass sweep and tremolo, driven by the LFO values that generate() just produced.
     void applyAudio (float* l, float* r, int n, const LfoParams& p, const float* lfo)
     {
@@ -174,6 +214,9 @@ private:
     }
 
     double sr = 44100.0, phase = 0.0;
+    float env = 0.0f, fade = 1.0f;
+    bool noteOn = false;
+    int quiet = 0;
     float held = 0.0f, smoothed = 0.0f, slew = 0.01f, slowSlew = 0.001f;
     std::uint32_t rnd = 12345u;
     float g = 0.1f, k = 0.8f, a1 = 0.5f, a2 = 0.05f, a3 = 0.005f;

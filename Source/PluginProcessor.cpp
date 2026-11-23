@@ -110,6 +110,7 @@ epinox::dsp::EngineParams VoxProcessor::readParams() const
     p.lfo.rateHz = v (pid::lfoRate);
     p.lfo.bpm = p.bpm;
     p.lfo.phase = v (pid::lfoPhase) / 360.0f;
+    p.lfo.fadeMs = v (pid::lfoFade);
     p.lfo.pitch = v (pid::lfoPitch) / 100.0f;
     p.lfo.formant = v (pid::lfoFormant) / 100.0f;
     p.lfo.filter = v (pid::lfoFilter) / 100.0f;

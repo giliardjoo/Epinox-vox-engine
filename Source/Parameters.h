@@ -57,6 +57,7 @@ namespace pid
     inline constexpr const char* lfoDiv     = "lfoDiv";
     inline constexpr const char* lfoRate    = "lfoRate";
     inline constexpr const char* lfoPhase   = "lfoPhase";
+    inline constexpr const char* lfoFade    = "lfoFade";
     inline constexpr const char* lfoPitch   = "lfoPitch";
     inline constexpr const char* lfoFormant = "lfoFormant";
     inline constexpr const char* lfoFilter  = "lfoFilter";
@@ -204,6 +205,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                        [] { juce::NormalisableRange<float> r (0.02f, 30.0f, 0.01f); r.setSkewForCentre (1.5f); return r; }(), 1.0f,
                                        juce::AudioParameterFloatAttributes().withLabel ("Hz")));
     addFloat (pid::lfoPhase, "LFO Phase", 0.0f, 360.0f, 0.0f, "deg", 1.0f);
+    addFloat (pid::lfoFade,  "LFO Fade In", 0.0f, 3000.0f, 0.0f, "ms", 1.0f);
     addPct (pid::lfoPitch,   "LFO Pitch",   0.0f);
     addPct (pid::lfoFormant, "LFO Formant", 0.0f);
     addPct (pid::lfoFilter,  "LFO Filter",  0.0f);

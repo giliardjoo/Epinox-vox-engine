@@ -1401,6 +1401,24 @@ void testLfo()
         check (on > off + 2, fmt ("pitch LFO keeps moving the reverb tail (crossing spread %.0f vs %.0f)", static_cast<double> (on), static_cast<double> (off)));
     }
 
+    // Fade-in: the LFO depth restarts from nothing with every new note and grows over the fade time.
+    {
+        dsp::LfoEngine e; e.prepare (sr);
+        const int total = static_cast<int> (sr * 3.0);
+        std::vector<float> sig (static_cast<size_t> (total), 0.0f), lfoV (static_cast<size_t> (total), 1.0f);
+        for (int i = 0; i < total; ++i)
+            if (i < sr * 1.0 || (i > sr * 1.5 && i < sr * 2.5)) sig[static_cast<size_t> (i)] = 0.3f * std::sin (0.06f * static_cast<float> (i));
+        for (int s0 = 0; s0 < total; s0 += 512)
+        {
+            const int m = std::min (512, total - s0);
+            e.applyFade (sig.data() + s0, sig.data() + s0, m, 500.0f, lfoV.data() + s0);
+        }
+        auto at = [&] (double t) { return lfoV[static_cast<size_t> (t * sr)]; };
+        check (at (0.05) < 0.15f && at (0.25) > 0.15f && at (0.25) < 0.85f && at (0.8) > 0.99f,
+               fmt ("fade-in grows over the fade time (%.2f, %.2f, %.2f)", at (0.05), at (0.25), at (0.8)));
+        check (at (1.55) < 0.15f && at (2.3) > 0.99f, "fade-in restarts on the next note");
+    }
+
     // Every shape stays inside -1..1 and the random one moves.
     for (int sh = 0; sh < 7; ++sh)
     {

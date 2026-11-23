@@ -153,6 +153,7 @@ private:
             LfoParams lp = p.lfo;
             lp.hostPpq += static_cast<double> (offset) * static_cast<double> (lp.bpm) / 60.0 / sampleRate_;
             lfo.generate (n, lp, lfoBuf.data());
+            lfo.applyFade (l, r, n, lp.fadeMs, lfoBuf.data());
             float mean = 0.0f;
 
             for (int i = 0; i < n; ++i)

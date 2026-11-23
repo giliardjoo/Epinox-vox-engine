@@ -195,6 +195,7 @@ public:
           sync (apvts, epinox::pid::lfoDiv, "DIVISION"),
           rate (apvts, epinox::pid::lfoRate, "RATE", " Hz", 2),
           phase (apvts, epinox::pid::lfoPhase, "PHASE", " deg", 0),
+          fade (apvts, epinox::pid::lfoFade, "FADE IN", " ms", 0),
           pitch (apvts, epinox::pid::lfoPitch, "> PITCH", " %", 0),
           formant (apvts, epinox::pid::lfoFormant, "> FORMANT", " %", 0),
           filter (apvts, epinox::pid::lfoFilter, "> FILTER", " %", 0),
@@ -206,7 +207,7 @@ public:
         syncToggle.setButtonText ("SYNC");
         syncAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, epinox::pid::lfoSyncOn, syncToggle);
 
-        for (auto* c : std::initializer_list<juce::Component*> { &shape, &sync, &rate, &phase, &pitch, &formant, &filter, &volume })
+        for (auto* c : std::initializer_list<juce::Component*> { &shape, &sync, &rate, &phase, &fade, &pitch, &formant, &filter, &volume })
             addAndMakeVisible (c);
 
         // With a tempo division selected the rate knob reads as that note value instead of Hz.
@@ -235,7 +236,7 @@ public:
             lastSync = s;
             initialised = true;
 
-            for (auto* c : std::initializer_list<juce::Component*> { &shape, &phase, &pitch, &formant, &filter, &volume, &syncToggle })
+            for (auto* c : std::initializer_list<juce::Component*> { &shape, &phase, &fade, &pitch, &formant, &filter, &volume, &syncToggle })
                 c->setAlpha (on ? 1.0f : 0.35f);
 
             // Only the control that is in use (Hz rate or tempo division) is lit.
@@ -281,8 +282,8 @@ public:
         syncToggle.setBounds (lower.removeFromRight (56).removeFromTop (22));
         sync.setBounds (lower);
 
-        const int cw = b.getWidth() / 6;
-        for (auto* k : std::initializer_list<juce::Component*> { &rate, &phase, &pitch, &formant, &filter, &volume })
+        const int cw = b.getWidth() / 7;
+        for (auto* k : std::initializer_list<juce::Component*> { &rate, &phase, &fade, &pitch, &formant, &filter, &volume })
             k->setBounds (b.removeFromLeft (cw));
     }
 
@@ -301,7 +302,7 @@ private:
     juce::AudioProcessorValueTreeState& state;
     juce::ToggleButton toggle, syncToggle;
     NeonCombo shape, sync;
-    NeonKnob rate, phase, pitch, formant, filter, volume;
+    NeonKnob rate, phase, fade, pitch, formant, filter, volume;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> toggleAttachment, syncAttachment;
     bool lastOn = true, initialised = false;
     int lastSync = -1;
