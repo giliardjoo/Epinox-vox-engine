@@ -219,3 +219,7 @@ Vibrato, filter and volume run at the very end of the chain, so reverb and delay
 Shapes: sine, triangle, square, saw down, saw up, random smooth and random step. **SYNC** is a switch: off uses the RATE knob (0.02-30 Hz, log taper), on uses the **DIVISION** menu, from 8 bars down to 1/32, each straight, dotted (D) and triplet (T). SYNC and DIVISION are separate host parameters ("LFO Sync" and "LFO Division"), so both can be automated in the DAW; rate and division changes glide instead of jumping. While the host plays, synced LFOs lock to the host position, so a cycle always starts on the beat; **PHASE** shifts where the cycle starts. When SYNC is not Free the RATE knob shows the note value. Moving the LFO never regenerates the melody. 200 of the factory presets use it.
 
 **FADE IN** (0.17.4) - the LFO depth restarts from zero at every new note and grows over the chosen time (0 = off, up to 3 s). A long lead starts straight and the vibrato grows in, as a singer does it. A note is detected when the voice starts after silence; it applies to all four destinations.
+
+## Builds
+
+Every push builds and tests the Windows plugin and installer. The macOS build (VST3, AU and `.pkg`) costs ten times as many CI minutes, so it only runs for a release: push a tag such as `v0.18.0`, or start the "Build and package" workflow by hand from the Actions tab.
