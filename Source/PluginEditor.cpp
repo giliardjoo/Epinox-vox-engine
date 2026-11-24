@@ -420,6 +420,15 @@ private:
         spatialPanel.refresh();
         lfoPanel.refresh();
 
+        // The morph amount only means something once a second voice is chosen in MORPH TO.
+        {
+            const bool morphOn = proc.apvts.getRawParameterValue (pid::morphTo)->load() > 0.5f;
+            morphSlider.setEnabled (morphOn);
+            morphSlider.setAlpha (morphOn ? 1.0f : 0.35f);
+            morphSlider.setTooltip (morphOn ? "How far the voice moves from VOICE towards MORPH TO."
+                                            : "Choose a voice in MORPH TO first: this slider blends VOICE into it.");
+        }
+
         generateButton.setEnabled (! proc.isGenerating());
 
         if (pendingGenerate && ! proc.isGenerating())
