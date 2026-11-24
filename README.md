@@ -41,7 +41,7 @@ automatically. Without it the header shows a plain text wordmark.
 | 2 | Audio engine: Vocal Chop, Transform, Effects, Spatial, Mix | done, validated by numerical tests |
 | 3 | Vocal generation (GENERATE), offline synthesis | done, validated by numerical tests |
 | 4 | Musical intelligence: Key and Scale, chord-tone melodies, tonic resolution | done, validated by numerical tests |
-| 5 | 705 factory presets that generate their own vocal | done |
+| 5 | 735 factory presets that generate their own vocal | done |
 | 6 | Commercial parameter document, licensing | not started |
 
 What is real today:
@@ -121,7 +121,7 @@ Details worth knowing:
 
 ## Factory presets (Phase 5)
 
-705 presets are built in, grouped by genre in the picker (`Source/FactoryPresets.h`). Click the preset name in the header to pick one from the genre menus, or use the
+735 presets are built in, grouped by genre in the picker (`Source/FactoryPresets.h`). Click the preset name in the header to pick one from the genre menus, or use the
 arrows (they stay inside the genre selected in the list and wrap around at its ends; your own saved presets are stepped through in their own list). Loading any preset (factory or file) generates its vocal automatically; Enter in the phrase field also generates. A factory preset resets every control to its default, applies its
 settings and generates its vocal straight away. Power is never changed by a preset.
 
@@ -230,5 +230,5 @@ All rights reserved. The source is visible for reference only; see LICENSE.
 
 ## Afterlife genre and softer sibilants (0.18)
 
-- **Afterlife** is an 11th genre: dark, ethereal, hypnotic vocals for the slow, melancholic side of melodic techno. It follows a minor hexatonic scale (no flat sixth, so it stays dark but open) and ships with 20 presets (prefix AF): deep and ethereal voices, long legato phrases, an octave down, a big dark Spatial room and a slow LFO (filter sweep, formant drift or a gentle lead vibrato with fade-in).
+- **Afterlife** is an 11th genre: dark, ethereal, hypnotic vocals for the slow, melancholic side of melodic techno. It follows a minor hexatonic scale (no flat sixth, so it stays dark but open) and ships with 50 presets (prefix AF): deep and ethereal voices, long legato phrases, an octave down, a big dark Spatial room and a slow LFO (filter sweep, formant drift or a gentle lead vibrato with fade-in).
 - The high noise of consonants such as s, x, ch and f was far too loud: it could be louder than the vowels. The fricative level is now about 10 dB lower, in line with real dry vocals.
