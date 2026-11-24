@@ -74,7 +74,7 @@ namespace pid
 inline juce::StringArray genreNames()
 {
     return { "Melodic Techno", "Progressive House", "Afro House", "Peak Time Techno", "Hard Techno",
-             "Hypnotic Techno", "Trance", "Deep House", "Tech House", "Ambient" };
+             "Hypnotic Techno", "Trance", "Deep House", "Tech House", "Ambient", "Afterlife" };
 }
 
 inline juce::StringArray lfoShapeNames()

@@ -501,7 +501,7 @@ private:
                 br2.bandpass (sr, fCur.f2, breathBw2);
                 br3.bandpass (sr, fCur.f3, breathBw3);
 
-                const float fricGain = noiseA * 0.30f * 1.73f * static_cast<float> (std::sqrt (sr / (2.0 * juce::jmax (200.0f, noiseBw))));
+                const float fricGain = noiseA * 0.065f * 1.73f * static_cast<float> (std::sqrt (sr / (2.0 * juce::jmax (200.0f, noiseBw))));
                 const float breathBase = breathA * (voiced ? 0.09f : 0.24f) * 1.73f;
                 const float w1 = 1.0f, w2 = 0.7f, w3 = 0.5f;
                 const float wn = 1.0f / std::sqrt (w1 * w1 + w2 * w2 + w3 * w3);
