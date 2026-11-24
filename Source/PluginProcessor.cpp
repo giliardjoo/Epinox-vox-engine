@@ -9,7 +9,7 @@ namespace
         genVoice ("gen_voice"), genEmotion ("gen_emotion"), genStyle ("gen_style"), genBpm ("gen_bpm"),
         genVariation ("gen_variation"), genKey ("gen_key"), genScale ("gen_scale"),
         genLegato ("gen_legato"), genBody ("gen_body"), genLayers ("gen_layers"),
-        genEngine ("gen_engine"), genMorphTo ("gen_morphto"), genMorph ("gen_morph"), genOctave ("gen_octave"), genPolish ("gen_polish"), genAir ("gen_air"), genMelody ("gen_melody");
+        genEngine ("gen_engine"), genMorphTo ("gen_morphto"), genMorph ("gen_morph"), genOctave ("gen_octave"), genPolish ("gen_polish"), genAir ("gen_air"), genDeEss ("gen_deess"), genWarmth ("gen_warmth"), genConsonants ("gen_consonants"), genHumanize ("gen_humanize"), genMelody ("gen_melody");
 
     juce::String keyFor (const epinox::GenerationRequest& r)
     {
@@ -18,6 +18,7 @@ namespace
                + "|" + juce::String (r.key) + "|" + juce::String (r.scale)
                + "|" + juce::String (r.legato, 3) + "|" + juce::String (r.body, 3) + "|" + juce::String (r.layers, 3)
                + "|" + juce::String (r.octave) + "|" + juce::String (r.polish, 3) + "|" + juce::String (r.air, 3)
+               + "|" + juce::String (r.deEss, 3) + "|" + juce::String (r.warmth, 3) + "|" + juce::String (r.consonants, 3) + "|" + juce::String (r.humanize, 3)
                + "|" + juce::String (r.melodyVariation) + "|" + r.engineId
                + "|" + juce::String (r.morphTo) + "|" + juce::String (r.morph, 3);
     }
@@ -42,6 +43,10 @@ namespace
         r.morph = s.getProperty (genMorph, 0.0);
         r.polish = s.getProperty (genPolish, 0.0);
         r.air = s.getProperty (genAir, 0.0);
+        r.deEss = s.getProperty (genDeEss, 0.0);
+        r.warmth = s.getProperty (genWarmth, 0.0);
+        r.consonants = s.getProperty (genConsonants, 0.5);
+        r.humanize = s.getProperty (genHumanize, 0.5);
         r.melodyVariation = s.getProperty (genMelody, -1);
         r.variation = static_cast<juce::uint32> (static_cast<int> (s.getProperty (genVariation, 0)));
         r.sampleRate = sampleRate;
@@ -369,6 +374,10 @@ bool VoxProcessor::requestGeneration (epinox::GenerationRequest request)
             s.setProperty (genMorph, request.morph, nullptr);
             s.setProperty (genPolish, request.polish, nullptr);
             s.setProperty (genAir, request.air, nullptr);
+            s.setProperty (genDeEss, request.deEss, nullptr);
+            s.setProperty (genWarmth, request.warmth, nullptr);
+            s.setProperty (genConsonants, request.consonants, nullptr);
+            s.setProperty (genHumanize, request.humanize, nullptr);
             s.setProperty (genMelody, request.melodyVariation, nullptr);
             lastMelodyVariation = request.melodyVariation >= 0 ? request.melodyVariation : static_cast<int> (request.variation);
             lastVariation = request.variation;

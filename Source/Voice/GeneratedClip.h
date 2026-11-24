@@ -13,6 +13,8 @@ struct GenerationRequest
     juce::String phrase;
     int genre = 0, voiceType = 0, emotion = 0, style = 0;
     float legato = 0.0f, body = 0.0f, layers = 0.0f;   // 0..1: connected notes, low-mid warmth, doubled voices
+    float deEss = 0.0f, warmth = 0.0f;                 // 0..1: split-band sibilance removal, treble tilt
+    float consonants = 0.5f, humanize = 0.5f;          // 0..1 (0.5 = original): fricative/plosive level, timing and tuning variation
     float polish = 0.0f, air = 0.0f;                   // 0..1: compression + de-essing, high-frequency shelf
     std::shared_ptr<const voice::CustomVoice> custom;   // set when a voice profile pack is the engine
     juce::String engineId = "builtin";   // voice engine: "builtin" or the id of a voice pack

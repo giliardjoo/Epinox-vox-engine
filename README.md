@@ -98,12 +98,16 @@ The Vocal Chop module is now off by default, because its gate cuts the vocal int
 Producer tools (v0.9):
 
 - **Polish** (default 50 %): finishing chain on the generated vocal: a look-ahead compressor evens the level and a de-esser calms sibilance.
+- **De-Ess** (default 60 %, v0.19.0): dedicated split-band de-esser above 4.5 kHz (Linkwitz-Riley), independent of Polish. Removes up to 20 dB of the "S/X/SH" band, only while it stands out from the body of the voice.
+- **Warmth** (default 25 %): gentle treble tilt (high shelf at 3.8 kHz, up to -6 dB) for a darker, rounder vocal.
+- **Consonants** (default 50 % = previous level): level of the fricative noise (S, SH, F, X). Lower for a softer diction.
+- **Humanize** (default 50 % = previous amount): timing, formant and tuning variation per note. 0 % = machine-exact.
 - **Air** (default 30 %): high shelf around 5.5 kHz that opens the top.
 - **Octave** (-2 to +2): shifts the whole melody by octaves. **Lock Melody**: GENERATE keeps the melody and only changes the voice details.
 - **EXPORT WAV**: saves the generated loop as a 24 bit stereo WAV. **DRAG TO TRACK**: drag the vocal as a WAV file onto a track in the host
   (it depends on the host accepting file drops from a plugin window; EXPORT WAV is the fallback).
 
-Automatic regeneration (v0.9.2): moving Genre, Voice Type, Emotion, Style, Key, Scale, Octave, Legato, Body, Layers, Polish, Air or
+Automatic regeneration (v0.9.2): moving Genre, Voice Type, Emotion, Style, Key, Scale, Octave, Legato, Body, Layers, Polish, Air, De-Ess, Warmth, Consonants, Humanize or
 BPM regenerates the vocal about 0.2 s after you stop, keeping the same take (same variation and melody). GENERATE and presets make a new
 take. Pitch and Formant act live and never need it. More human timing: each note lands up to 4 ms early or late, and the tone gets
 slightly purer on high notes and fuller on low ones.

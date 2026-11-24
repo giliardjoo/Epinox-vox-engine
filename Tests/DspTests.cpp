@@ -800,6 +800,74 @@ void testVoiceGenerator()
         check (highShare (bright->left) > highShare (raw->left) * 1.1,
                fmt ("air opens the top: share above 5 kHz %.4f -> %.4f", highShare (raw->left), highShare (bright->left)));
 
+        // New quality controls: DE-ESS, CONSONANTS, WARMTH, HUMANIZE.
+        auto renderQ = [&] (float air, float deEss, float cons, float warm, float hum)
+        {
+            epinox::GenerationRequest q;
+            q.phrase = polishPhrases[0];
+            q.sampleRate = sr;
+            q.style = 5;
+            q.polish = 0.5f;
+            q.air = air;
+            q.deEss = deEss;
+            q.consonants = cons;
+            q.warmth = warm;
+            q.humanize = hum;
+            return epinox::voice::renderPhrase (q);
+        };
+        auto peakHigh = [&] (const std::vector<float>& x)
+        {
+            // Largest short-term level above 5 kHz against the overall RMS, in dB (what a listener hears as "S").
+            std::vector<float> hp (x.size());
+            const double w = std::tan (juce::MathConstants<double>::pi * 5000.0 / sr), k = w / (1.0 + w);
+            double lp[3] = { 0.0, 0.0, 0.0 };
+
+            for (size_t i = 0; i < x.size(); ++i)
+            {
+                double v = x[i];
+
+                for (auto& l : lp) { l += k * (v - l); v -= l; }
+
+                hp[i] = (float) v;
+            }
+
+            double e = 0.0, best = 0.0, win = 0.0;
+
+            for (size_t i = 0; i < x.size(); ++i)
+            {
+                e += (double) x[i] * x[i];
+                win += (double) hp[i] * hp[i];
+
+                if (i >= 441) { const double d = (double) hp[i - 441]; win -= d * d; }
+
+                best = std::max (best, win / 441.0);
+            }
+
+            return 10.0 * std::log10 (best / std::max (1.0e-12, e / (double) x.size()));
+        };
+
+        const auto dsOff = renderQ (0.3f, 0.0f, 0.5f, 0.0f, 0.5f), dsOn = renderQ (0.3f, 1.0f, 0.5f, 0.0f, 0.5f);
+        const auto consLow = renderQ (0.3f, 0.0f, 0.0f, 0.0f, 0.5f), consHigh = renderQ (0.3f, 0.0f, 1.0f, 0.0f, 0.5f);
+        const auto warmOn = renderQ (0.3f, 0.0f, 0.5f, 1.0f, 0.5f);
+        const auto humA = renderQ (0.3f, 0.0f, 0.5f, 0.0f, 0.0f), humB = renderQ (0.3f, 0.0f, 0.5f, 0.0f, 1.0f);
+
+        check (dsOff && dsOn && peakHigh (dsOn->left) < peakHigh (dsOff->left) - 2.0,
+               fmt ("de-ess lowers the sibilant peak above 5 kHz: %.1f -> %.1f dB re RMS", peakHigh (dsOff->left), peakHigh (dsOn->left)));
+        check (consLow && consHigh && peakHigh (consLow->left) < peakHigh (consHigh->left) - 1.0,
+               fmt ("consonants scales fricative level: %.1f -> %.1f dB", peakHigh (consLow->left), peakHigh (consHigh->left)));
+        check (warmOn && dsOff && highShare (warmOn->left) < highShare (dsOff->left) * 0.8,
+               fmt ("warmth tilts the top down: share above 5 kHz %.4f -> %.4f", highShare (dsOff->left), highShare (warmOn->left)));
+
+        {
+            double diff = 0.0;
+            const size_t m = humA && humB ? std::min (humA->left.size(), humB->left.size()) : 0;
+
+            for (size_t i = 0; i < m; ++i)
+                diff += std::abs ((double) humA->left[i] - humB->left[i]);
+
+            check (m > 0 && diff > 1.0, fmt ("humanize changes timing/tuning: summed difference %.1f", diff));
+        }
+
         // Octave and a locked melody seed.
         epinox::GenerationRequest q;
         q.phrase = "hold on";

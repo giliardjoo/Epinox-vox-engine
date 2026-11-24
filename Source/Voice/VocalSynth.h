@@ -118,6 +118,7 @@ private:
 
             addBody (*clip, juce::jlimit (0.0f, 1.0f, req.body));
             polishClip (*clip, juce::jlimit (0.0f, 1.0f, req.polish), juce::jlimit (0.0f, 1.0f, req.air));
+            refineClip (*clip, juce::jlimit (0.0f, 1.0f, req.deEss), juce::jlimit (0.0f, 1.0f, req.warmth));
 
             normalise (*clip);
 
@@ -161,7 +162,7 @@ private:
                 const auto& syl = comp.syllables[static_cast<size_t> (note.syllable)];
 
                 // A human singer is never exactly on the grid: up to 4 ms early or late.
-                const double t0 = std::max (0.0, note.beat * spb + (flat ? 0.0 : (rng.nextFloat() - 0.5f) * 0.008));
+                const double t0 = std::max (0.0, note.beat * spb + (flat ? 0.0 : (rng.nextFloat() - 0.5f) * 0.008 * humanScale()));
                 const double dur = note.beats * spb;
                 const double voicedEnd = t0 + dur * (legato >= 0.97f ? 1.0 : legato);
                 auto vf = scaled (vowelF (syl.vowel));
@@ -171,9 +172,9 @@ private:
 
                 if (! flat)
                 {
-                    vf.f1 *= 1.0f + 0.05f * (rng.nextFloat() - 0.5f);
-                    vf.f2 *= 1.0f + 0.05f * (rng.nextFloat() - 0.5f);
-                    noteMidi += 0.12f * (rng.nextFloat() - 0.5f);
+                    vf.f1 *= 1.0f + 0.05f * humanScale() * (rng.nextFloat() - 0.5f);
+                    vf.f2 *= 1.0f + 0.05f * humanScale() * (rng.nextFloat() - 0.5f);
+                    noteMidi += 0.12f * humanScale() * (rng.nextFloat() - 0.5f);
                 }
 
                 auto specs = [] (const std::vector<juce::String>& codes)
@@ -501,7 +502,7 @@ private:
                 br2.bandpass (sr, fCur.f2, breathBw2);
                 br3.bandpass (sr, fCur.f3, breathBw3);
 
-                const float fricGain = noiseA * 0.065f * 1.73f * static_cast<float> (std::sqrt (sr / (2.0 * juce::jmax (200.0f, noiseBw))));
+                const float fricGain = noiseA * 0.065f * 1.73f * consonantScale() * static_cast<float> (std::sqrt (sr / (2.0 * juce::jmax (200.0f, noiseBw))));
                 const float breathBase = breathA * (voiced ? 0.09f : 0.24f) * 1.73f;
                 const float w1 = 1.0f, w2 = 0.7f, w3 = 0.5f;
                 const float wn = 1.0f / std::sqrt (w1 * w1 + w2 * w2 + w3 * w3);
@@ -819,6 +820,119 @@ private:
             if (air > 0.001f)
             {
                 auto shelfL = highShelf (5500.0, 5.0 * air), shelfR = shelfL;
+
+                for (size_t i = 0; i < n; ++i)
+                {
+                    clip.left[i] = static_cast<float> (shelfL.process (clip.left[i]));
+                    clip.right[i] = static_cast<float> (shelfR.process (clip.right[i]));
+                }
+            }
+        }
+
+        float humanScale() const noexcept     { return 2.0f * juce::jlimit (0.0f, 1.0f, req.humanize); }       // 0.5 = the original amount
+        float consonantScale() const noexcept { return 2.0f * juce::jlimit (0.0f, 1.0f, req.consonants); }   // 0.5 = the original level
+
+        // Dedicated sibilance removal (split-band, independent of Polish) and a warmth tilt.
+        static void refineClip (GeneratedClip& clip, float deEss, float warmth)
+        {
+            const size_t n = clip.left.size();
+            const double sr = clip.sampleRate;
+
+            if (n == 0 || (deEss < 0.001f && warmth < 0.001f))
+                return;
+
+            struct Bq
+            {
+                double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
+
+                double process (double x)
+                {
+                    const double y = b0 * x + z1;
+                    z1 = b1 * x - a1 * y + z2;
+                    z2 = b2 * x - a2 * y;
+                    return y;
+                }
+            };
+
+            auto highpass = [&] (double fc)
+            {
+                const double w0 = juce::MathConstants<double>::twoPi * fc / sr, cw = std::cos (w0);
+                const double alpha = std::sin (w0) / (2.0 * 0.7071);
+                const double a0 = 1.0 + alpha;
+                Bq q;
+                q.b0 = ((1.0 + cw) / 2.0) / a0;
+                q.b1 = -(1.0 + cw) / a0;
+                q.b2 = q.b0;
+                q.a1 = -2.0 * cw / a0;
+                q.a2 = (1.0 - alpha) / a0;
+                return q;
+            };
+
+            // Linkwitz-Riley split (two Butterworth sections each way, Q 0.7071): low + high is flat in magnitude.
+            auto lowpass = [&] (double fc)
+            {
+                const double w0 = juce::MathConstants<double>::twoPi * fc / sr, cw = std::cos (w0);
+                const double alpha = std::sin (w0) / (2.0 * 0.7071);
+                const double a0 = 1.0 + alpha;
+                Bq q;
+                q.b0 = ((1.0 - cw) / 2.0) / a0;
+                q.b1 = (1.0 - cw) / a0;
+                q.b2 = q.b0;
+                q.a1 = -2.0 * cw / a0;
+                q.a2 = (1.0 - alpha) / a0;
+                return q;
+            };
+
+            auto highShelf = [&] (double fc, double gainDb)
+            {
+                const double A = std::pow (10.0, gainDb / 40.0);
+                const double w0 = juce::MathConstants<double>::twoPi * fc / sr, cw = std::cos (w0);
+                const double alpha = std::sin (w0) / 2.0 * std::sqrt (2.0);
+                const double sq = 2.0 * std::sqrt (A) * alpha;
+                const double a0 = (A + 1) - (A - 1) * cw + sq;
+                Bq q;
+                q.b0 = A * ((A + 1) + (A - 1) * cw + sq) / a0;
+                q.b1 = -2.0 * A * ((A - 1) + (A + 1) * cw) / a0;
+                q.b2 = A * ((A + 1) + (A - 1) * cw - sq) / a0;
+                q.a1 = 2.0 * ((A - 1) - (A + 1) * cw) / a0;
+                q.a2 = ((A + 1) - (A - 1) * cw - sq) / a0;
+                return q;
+            };
+
+            if (deEss > 0.001f)
+            {
+                // Band above 4.5 kHz (fourth order). Its level against the 300 Hz-4.5 kHz body decides how much of it is removed.
+                Bq hpL1 = highpass (4500.0), hpL2 = hpL1, hpR1 = hpL1, hpR2 = hpL1;
+                Bq lpL1 = lowpass (4500.0), lpL2 = lpL1, lpR1 = lpL1, lpR2 = lpL1;
+                const double attBand = 1.0 - std::exp (-1.0 / (0.0003 * sr)), relBand = 1.0 - std::exp (-1.0 / (0.020 * sr));
+                const double attGain = 1.0 - std::exp (-1.0 / (0.0002 * sr)), relGain = 1.0 - std::exp (-1.0 / (0.030 * sr));
+                const double slow = 1.0 - std::exp (-1.0 / (0.040 * sr));
+                const double thr = 0.60 - 0.45 * deEss;                          // allowed band-to-body ratio
+                const double floorGain = std::pow (10.0, -(6.0 + 14.0 * deEss) / 20.0);
+                double bandEnv = 0.0, bodyEnv = 1.0e-4, gain = 1.0;
+
+                for (size_t i = 0; i < n; ++i)
+                {
+                    const double xl = clip.left[i], xr = clip.right[i];
+                    const double bl = hpL2.process (hpL1.process (xl)), br = hpR2.process (hpR1.process (xr));
+                    const double band = std::max (std::abs (bl), std::abs (br));
+                    const double lowL = lpL2.process (lpL1.process (xl)), lowR = lpR2.process (lpR1.process (xr));
+                    const double body = std::max (std::abs (lowL), std::abs (lowR));
+                    bandEnv += (band > bandEnv ? attBand : relBand) * (band - bandEnv);
+                    bodyEnv += slow * (body - bodyEnv);
+
+                    const double ratio = bandEnv / std::max (2.0e-4, bodyEnv);
+                    const double target = ratio > thr ? std::max (floorGain, thr / ratio) : 1.0;
+                    gain += (target < gain ? attGain : relGain) * (target - gain);
+
+                    clip.left[i] = static_cast<float> (lowL + bl * gain);
+                    clip.right[i] = static_cast<float> (lowR + br * gain);
+                }
+            }
+
+            if (warmth > 0.001f)
+            {
+                auto shelfL = highShelf (3800.0, -6.0 * warmth), shelfR = shelfL;
 
                 for (size_t i = 0; i < n; ++i)
                 {

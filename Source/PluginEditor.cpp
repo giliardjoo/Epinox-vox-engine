@@ -128,6 +128,10 @@ public:
           octaveKnob   (p.apvts, pid::octave,  "OCTAVE",  "",    0),
           polishKnob   (p.apvts, pid::polish,  "POLISH",  " %",  0),
           airKnob      (p.apvts, pid::air,     "AIR",     " %",  0),
+          deEssKnob    (p.apvts, pid::deEss,      "DE-ESS",     " %", 0),
+          warmthKnob   (p.apvts, pid::warmth,     "WARMTH",     " %", 0),
+          consonantsKnob (p.apvts, pid::consonants, "CONSONANT", " %", 0),
+          humanizeKnob (p.apvts, pid::humanize,   "HUMANIZE",   " %", 0),
           mixKnob      (p.apvts, pid::mix,     "MIX",     " %",  0, true),
           outKnob      (p.apvts, pid::outGain, "OUTPUT",  " dB", 1),
           waveform (p),
@@ -244,7 +248,7 @@ public:
 
         for (auto* c : std::initializer_list<juce::Component*> {
                  &genreList, &engineCombo, &phrase, &generateButton,
-                 &voiceCombo, &emotionCombo, &styleCombo, &keyCombo, &listenButton, &scaleCombo, &morphCombo, &morphSlider, &pitchKnob, &formantKnob, &bpmKnob, &legatoKnob, &bodyKnob, &layersKnob, &octaveKnob, &polishKnob, &airKnob, &lockButton, &exportButton, &dragHandle,
+                 &voiceCombo, &emotionCombo, &styleCombo, &keyCombo, &listenButton, &scaleCombo, &morphCombo, &morphSlider, &pitchKnob, &formantKnob, &bpmKnob, &legatoKnob, &bodyKnob, &layersKnob, &octaveKnob, &polishKnob, &airKnob, &deEssKnob, &warmthKnob, &consonantsKnob, &humanizeKnob, &lockButton, &exportButton, &dragHandle,
                  &mixKnob, &outKnob, &waveform, &meterIn, &meterOut,
                  &chopPanel, &transformPanel, &effectsPanel, &spatialPanel, &lfoPanel,
                  &prevButton, &nextButton, &saveButton, &openButton, &powerButton,
@@ -370,7 +374,14 @@ public:
         exportButton.setBounds (758, 380, 90, 36);
         dragHandle.setBounds   (758, 424, 90, 36);
 
-        waveform.setBounds (236, 470, 612, 76);
+        {
+            NeonKnob* q[] = { &deEssKnob, &warmthKnob, &consonantsKnob, &humanizeKnob };
+
+            for (int i = 0; i < 4; ++i)
+                q[i]->setBounds (236 + i * 102, 462, 102, 90);
+        }
+
+        waveform.setBounds (650, 470, 198, 76);
 
         mixKnob.setBounds (864, 80, 220, 250);
         meterIn.setBounds  (878, 342, 50, 204);
@@ -530,6 +541,10 @@ private:
         request.octave    = static_cast<int> (get (pid::octave));
         request.polish    = get (pid::polish) / 100.0f;
         request.air       = get (pid::air) / 100.0f;
+        request.deEss     = get (pid::deEss) / 100.0f;
+        request.warmth    = get (pid::warmth) / 100.0f;
+        request.consonants = get (pid::consonants) / 100.0f;
+        request.humanize  = get (pid::humanize) / 100.0f;
         request.engineId  = selectedEngineId();
         request.morphTo   = static_cast<int> (get (pid::morphTo)) - 1;   // choice 0 is "Off"
         request.morph     = request.morphTo >= 0 ? get (pid::morphAmt) / 100.0f : 0.0f;
@@ -674,7 +689,7 @@ private:
     std::atomic<bool> autoDirty { false }, ignoreChanges { false };
     std::atomic<juce::uint32> lastChangeMs { 0 };
     static constexpr const char* autoIds[] = { pid::genre, pid::voiceType, pid::emotion, pid::style, pid::key, pid::scale, pid::octave,
-                                                pid::legato, pid::body, pid::layers, pid::polish, pid::air, pid::bpm, pid::morphTo, pid::morphAmt };
+                                                pid::legato, pid::body, pid::layers, pid::polish, pid::air, pid::deEss, pid::warmth, pid::consonants, pid::humanize, pid::bpm, pid::morphTo, pid::morphAmt };
     juce::String selectedEngineId() const
     {
         const auto i = engineCombo.getSelectedItemIndex();
@@ -714,7 +729,7 @@ private:
     NeonCombo voiceCombo, emotionCombo, styleCombo, keyCombo, scaleCombo, morphCombo;
     juce::Slider morphSlider;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> morphAttachment;
-    NeonKnob pitchKnob, formantKnob, bpmKnob, legatoKnob, bodyKnob, layersKnob, octaveKnob, polishKnob, airKnob, mixKnob, outKnob;
+    NeonKnob pitchKnob, formantKnob, bpmKnob, legatoKnob, bodyKnob, layersKnob, octaveKnob, polishKnob, airKnob, deEssKnob, warmthKnob, consonantsKnob, humanizeKnob, mixKnob, outKnob;
     juce::ToggleButton lockButton;
     juce::TextButton exportButton, listenButton;
     DragHandle dragHandle;
