@@ -223,3 +223,7 @@ Shapes: sine, triangle, square, saw down, saw up, random smooth and random step.
 ## Builds
 
 Every push builds and tests the Windows plugin and installer. The macOS build (VST3, AU and `.pkg`) costs ten times as many CI minutes, so it only runs for a release: push a tag such as `v0.18.0`, or start the "Build and package" workflow by hand from the Actions tab.
+
+## Licence
+
+All rights reserved. The source is visible for reference only; see LICENSE.
